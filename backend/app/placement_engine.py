@@ -107,15 +107,16 @@ class PlacementEngine:
                         beacons.append(e)
                         mark_covered(e["x"], e["y"])
 
-        # ── Phase 2: Fill uncovered building interior (hallways, corridors, gaps) ──
+        # ── Phase 2: Fill uncovered room interior (hallways detected as rooms, gaps) ──
+        # Only place inside detected rooms — NOT the entire building footprint.
         half = beacon_spacing_px * 0.5
         x = half
         while x < self.width - half:
             y = half
             while y < self.height - half:
                 ix, iy = int(x), int(y)
-                # Only place if: inside building, navigable, not already covered
-                if (self._is_inside_building(ix, iy) and
+                # Only place if: inside a detected room, navigable, not already covered
+                if (self._is_inside_room(ix, iy) and
                     self._is_navigable(ix, iy) and
                     covered_mask[min(iy, self.height - 1), min(ix, self.width - 1)] == 0):
                     beacons.append({
