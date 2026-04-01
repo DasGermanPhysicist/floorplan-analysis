@@ -8,15 +8,17 @@ COPY frontend/ ./
 RUN npm run build
 
 # ── Stage 2: Production backend + frontend ───────────────────────────────────
-FROM python:3.13-slim
+FROM python:3.12-slim
 
-# Install system dependencies (poppler for PDF processing, libgl for OpenCV)
+# Install system dependencies (poppler for PDF processing, OpenCV runtime libs)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender1 \
+    gcc \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
