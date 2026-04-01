@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+backend/venv/
+backend/uploads/*
+backend/processed/*
+backend/saved_projects/*
+backend/diag_output*/
+backend/diagnose*.py
+backend/test_*.py
+!backend/uploads/.gitkeep
+!backend/processed/.gitkeep
+!backend/saved_projects/.gitkeep
+
+# Node
+node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+*.swp
+
+# IDE
+.vscode/
+.idea/
