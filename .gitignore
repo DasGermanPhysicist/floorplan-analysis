@@ -16,8 +16,10 @@ backend/test_*.py
 node_modules/
 frontend/dist/
 
-# PDFs (customer data)
+# Customer data
 *.pdf
+Training/
+Device Map/
 
 # OS
 .DS_Store
