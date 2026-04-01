@@ -28,17 +28,23 @@ Automated infrastructure placement tool for Link Labs AirFinder 2 indoor asset t
 
 ## Installation
 
-### Option 1: One-Click Installer (macOS)
+### Option 1: One-Click Installer
 
-Run a single command — it installs all dependencies, builds the app, and creates a desktop shortcut:
+#### macOS
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DasGermanPhysicist/floorplan-analysis/main/install.sh | bash
 ```
 
+#### Windows (run PowerShell as Administrator)
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/DasGermanPhysicist/floorplan-analysis/main/install.ps1'))
+```
+
 After installation, **double-click "Floorplan Analyzer" on your Desktop** to launch.
 
-> The installer automatically handles Homebrew, Python, Node.js, Poppler, and all dependencies.  
+> Both installers handle all dependencies (Python, Node.js, Poppler) automatically.  
 > To update: re-run the same command — it pulls the latest version.
 
 ### Option 2: Docker — One Command, Any OS
