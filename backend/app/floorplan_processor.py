@@ -11,13 +11,13 @@ class FloorplanProcessor:
     # Default room detection parameters
     DEFAULT_ROOM_PARAMS = {
         "sensitivity": 8,          # Adaptive threshold C value (higher = more features detected)
-        "min_room_area_pct": 0.005, # Min room area as % of image (0.001 - 0.1)
-        "max_room_area_pct": 6.0,   # Max room area as % of image
-        "min_dilation": 6,          # Smallest dilation kernel (px) — lower catches smaller rooms
-        "max_dilation": 20,         # Largest dilation kernel (px) — higher bridges wider doors
+        "min_room_area_pct": 0.002, # Min room area as % of image — lowered to catch small rooms
+        "max_room_area_pct": 8.0,   # Max room area as % of image
+        "min_dilation": 4,          # Smallest dilation kernel (px) — lower catches smaller rooms
+        "max_dilation": 18,         # Largest dilation kernel (px) — higher bridges wider doors
         "num_scales": 5,            # Number of dilation scales between min and max
-        "solidity_threshold": 0.25, # Min solidity (contour area / bbox area) to accept a room
-        "max_aspect_ratio": 10.0,   # Max bbox aspect ratio to accept a room
+        "solidity_threshold": 0.20, # Min solidity (contour area / bbox area) to accept a room
+        "max_aspect_ratio": 15.0,   # Max bbox aspect ratio — higher to allow corridors
     }
 
     def __init__(self, file_path: str, project_id: str, output_dir: str,
@@ -280,28 +280,43 @@ class FloorplanProcessor:
         thresholds miss) at multiple dilation scales to find rooms of all sizes.
         Small dilation catches small rooms; larger dilation catches rooms with
         wide doors. Results are merged by centroid proximity.
+
+        Improvements over the basic approach:
+        - Watershed separation splits merged room blobs into individual rooms
+        - Corridor-aware detection with relaxed aspect ratio
+        - Scale-aware dedup radius
+        - Fixed-threshold pass to catch rooms with very thin walls
         """
         height, width = walls_mask.shape
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(gray, (3, 3), 0)
 
-        # Adaptive threshold picks up ALL drawn features including thin partitions
-        sensitivity_c = max(1, int(self.room_params["sensitivity"]))
-        all_dark = cv2.adaptiveThreshold(
-            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY_INV, 25, sensitivity_c
-        )
-        all_dark = cv2.bitwise_and(all_dark, building_mask)
-
         dim = max(width, height)
         rp = self.room_params
         min_room_area = (width * height) * (rp["min_room_area_pct"] / 100.0)
         max_room_area = (width * height) * (rp["max_room_area_pct"] / 100.0)
-        min_room_dim = max(15, dim // 500)
+        min_room_dim = max(10, dim // 600)
 
-        # Multi-scale: sweep from min_dilation to max_dilation
+        # Scale-aware dedup radius — larger images need larger dedup
+        dedup_radius = max(20, dim // 200)
+
+        # ── Pass 1: Adaptive threshold (catches thin partition walls) ──
+        sensitivity_c = max(1, int(rp["sensitivity"]))
+        all_dark_adaptive = cv2.adaptiveThreshold(
+            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV, 25, sensitivity_c
+        )
+        all_dark_adaptive = cv2.bitwise_and(all_dark_adaptive, building_mask)
+
+        # ── Pass 2: Fixed threshold (catches walls that adaptive misses) ──
+        _, all_dark_fixed = cv2.threshold(blurred, 200, 255, cv2.THRESH_BINARY_INV)
+        all_dark_fixed = cv2.bitwise_and(all_dark_fixed, building_mask)
+
+        threshold_maps = [all_dark_adaptive, all_dark_fixed]
+
+        # Multi-scale dilation sizes
         n = max(1, int(rp["num_scales"]))
-        d_min = max(3, int(rp["min_dilation"]))
+        d_min = max(2, int(rp["min_dilation"]))
         d_max = max(d_min, int(rp["max_dilation"]))
         if n == 1:
             dilation_sizes = [d_min]
@@ -312,87 +327,176 @@ class FloorplanProcessor:
         rooms = []
         rooms_mask = np.zeros((height, width), dtype=np.uint8)
 
-        for dil_px in dilation_sizes:
-            kernel_dil = np.ones((dil_px, dil_px), np.uint8)
-            dark_dilated = cv2.dilate(all_dark, kernel_dil, iterations=1)
+        for dark_map in threshold_maps:
+            for dil_px in dilation_sizes:
+                kernel_dil = np.ones((dil_px, dil_px), np.uint8)
+                dark_dilated = cv2.dilate(dark_map, kernel_dil, iterations=1)
 
-            interior = cv2.bitwise_and(building_mask, cv2.bitwise_not(dark_dilated))
+                interior = cv2.bitwise_and(building_mask, cv2.bitwise_not(dark_dilated))
 
-            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
-                interior, connectivity=4
-            )
+                num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+                    interior, connectivity=4
+                )
 
-            for lbl in range(1, num_labels):
-                area = stats[lbl, cv2.CC_STAT_AREA]
-                if area < min_room_area or area > max_room_area:
-                    continue
+                for lbl in range(1, num_labels):
+                    area = stats[lbl, cv2.CC_STAT_AREA]
+                    if area < min_room_area or area > max_room_area:
+                        continue
 
-                cx, cy = centroids[lbl]
+                    cx, cy = centroids[lbl]
 
-                # Skip if we already found a room near this centroid
-                is_dup = False
-                for (rx, ry) in found_centroids:
-                    if abs(cx - rx) < 30 and abs(cy - ry) < 30:
-                        is_dup = True
-                        break
-                if is_dup:
-                    continue
+                    # Check if this is a large blob that might be merged rooms
+                    # If area > 4x the expected average room, try watershed split
+                    avg_room_area = (width * height) * 0.002  # rough heuristic
+                    room_pixels = (labels == lbl).astype(np.uint8) * 255
 
-                # Extract contour
-                room_pixels = (labels == lbl).astype(np.uint8) * 255
-                contours, _ = cv2.findContours(room_pixels, cv2.RETR_EXTERNAL,
-                                               cv2.CHAIN_APPROX_SIMPLE)
-                if not contours:
-                    continue
+                    if area > avg_room_area * 4:
+                        sub_rooms = self._watershed_split(room_pixels, min_room_area,
+                                                          min_room_dim, dedup_radius,
+                                                          found_centroids, rp)
+                        for sr in sub_rooms:
+                            rooms.append(sr)
+                            cv2.drawContours(rooms_mask, [sr["contour"]], -1, 255, -1)
+                            found_centroids.append(sr["centroid"])
+                        if sub_rooms:
+                            continue  # successfully split, skip whole-blob processing
 
-                contour = max(contours, key=cv2.contourArea)
-                c_area = cv2.contourArea(contour)
-                if c_area < min_room_area:
-                    continue
+                    # Skip if we already found a room near this centroid
+                    is_dup = self._is_duplicate(cx, cy, found_centroids, dedup_radius)
+                    if is_dup:
+                        continue
 
-                # Shape filtering: reject thin slivers and irregular fragments
-                bbox_r = cv2.boundingRect(contour)
-                bw, bh = bbox_r[2], bbox_r[3]
-                if bw < min_room_dim or bh < min_room_dim:
-                    continue
-                bbox_area = bw * bh
-                # Solidity: ratio of contour area to bounding box area
-                # Real rooms are typically > 0.3 solidity
-                solidity = c_area / bbox_area if bbox_area > 0 else 0
-                if solidity < rp["solidity_threshold"]:
-                    continue
-                # Reject very elongated thin shapes
-                aspect = max(bw, bh) / (min(bw, bh) + 1)
-                if aspect > rp["max_aspect_ratio"]:
-                    continue
-
-                M = cv2.moments(contour)
-                if M["m00"] == 0:
-                    continue
-
-                mcx = M["m10"] / M["m00"]
-                mcy = M["m01"] / M["m00"]
-                bbox = bbox_r
-
-                epsilon = 0.015 * cv2.arcLength(contour, True)
-                simplified = cv2.approxPolyDP(contour, epsilon, True)
-                simplified_pts = simplified.reshape(-1, 2).tolist()
-
-                rooms.append({
-                    "centroid": (mcx, mcy),
-                    "area": c_area,
-                    "bbox": bbox,
-                    "contour": contour,
-                    "contour_simplified": simplified_pts,
-                })
-
-                cv2.drawContours(rooms_mask, [contour], -1, 255, -1)
-                found_centroids.append((mcx, mcy))
+                    room = self._extract_room(room_pixels, min_room_area, min_room_dim, rp)
+                    if room is not None:
+                        rooms.append(room)
+                        cv2.drawContours(rooms_mask, [room["contour"]], -1, 255, -1)
+                        found_centroids.append(room["centroid"])
 
         # Save masks
         np.save(str(self.output_dir / f"{self.project_id}_rooms_mask.npy"), rooms_mask)
 
         return rooms, rooms_mask
+
+    def _is_duplicate(self, cx: float, cy: float, found_centroids: list,
+                      dedup_radius: float) -> bool:
+        """Check if a centroid is too close to an already-found room."""
+        for (rx, ry) in found_centroids:
+            if abs(cx - rx) < dedup_radius and abs(cy - ry) < dedup_radius:
+                return True
+        return False
+
+    def _extract_room(self, room_pixels: np.ndarray, min_room_area: float,
+                      min_room_dim: int, rp: dict) -> dict:
+        """Extract a single room from a binary mask. Returns None if rejected."""
+        contours, _ = cv2.findContours(room_pixels, cv2.RETR_EXTERNAL,
+                                       cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+
+        contour = max(contours, key=cv2.contourArea)
+        c_area = cv2.contourArea(contour)
+        if c_area < min_room_area:
+            return None
+
+        bbox_r = cv2.boundingRect(contour)
+        bw, bh = bbox_r[2], bbox_r[3]
+        if bw < min_room_dim or bh < min_room_dim:
+            return None
+        bbox_area = bw * bh
+        solidity = c_area / bbox_area if bbox_area > 0 else 0
+        if solidity < rp["solidity_threshold"]:
+            return None
+        aspect = max(bw, bh) / (min(bw, bh) + 1)
+        if aspect > rp["max_aspect_ratio"]:
+            return None
+
+        M = cv2.moments(contour)
+        if M["m00"] == 0:
+            return None
+
+        mcx = M["m10"] / M["m00"]
+        mcy = M["m01"] / M["m00"]
+
+        epsilon = 0.015 * cv2.arcLength(contour, True)
+        simplified = cv2.approxPolyDP(contour, epsilon, True)
+        simplified_pts = simplified.reshape(-1, 2).tolist()
+
+        return {
+            "centroid": (mcx, mcy),
+            "area": c_area,
+            "bbox": bbox_r,
+            "contour": contour,
+            "contour_simplified": simplified_pts,
+        }
+
+    def _watershed_split(self, blob_mask: np.ndarray, min_room_area: float,
+                         min_room_dim: int, dedup_radius: float,
+                         found_centroids: list, rp: dict) -> List[Dict]:
+        """Use watershed to split a large merged blob into individual rooms.
+
+        1. Distance transform to find room centers
+        2. Local maxima become seeds
+        3. Watershed segmentation splits the blob
+        """
+        # Distance transform — peaks are room centers
+        dist = cv2.distanceTransform(blob_mask, cv2.DIST_L2, 5)
+        if dist.max() == 0:
+            return []
+
+        # Adaptive threshold on distance to find peaks
+        # Use a fraction of the max distance as threshold
+        thresh_val = max(dist.max() * 0.3, 5.0)
+        _, sure_fg = cv2.threshold(dist, thresh_val, 255, cv2.THRESH_BINARY)
+        sure_fg = sure_fg.astype(np.uint8)
+
+        # Find connected components of sure foreground — these are seeds
+        num_seeds, seed_labels = cv2.connectedComponents(sure_fg)
+
+        if num_seeds <= 2:
+            # Not enough seeds to split — return empty (will fall through to
+            # whole-blob processing)
+            return []
+
+        # Watershed markers: 1-based labels for seeds, 0 for unknown
+        markers = seed_labels.copy().astype(np.int32)
+        # Mark background (outside blob) as 1 so watershed doesn't flood it
+        markers[blob_mask == 0] = 1
+        # Shift seed labels to start at 2
+        markers[markers > 0] = markers[markers > 0] + 1
+        markers[blob_mask == 0] = 1
+
+        # Watershed needs a 3-channel image
+        blob_bgr = cv2.cvtColor(blob_mask, cv2.COLOR_GRAY2BGR)
+        cv2.watershed(blob_bgr, markers)
+
+        rooms = []
+        for lbl in range(2, num_seeds + 1):
+            lbl_shifted = lbl + 1
+            seg_mask = (markers == lbl_shifted).astype(np.uint8) * 255
+
+            # Check area
+            seg_area = cv2.countNonZero(seg_mask)
+            if seg_area < min_room_area:
+                continue
+
+            # Check for duplicate centroids
+            M = cv2.moments(seg_mask)
+            if M["m00"] == 0:
+                continue
+            cx = M["m10"] / M["m00"]
+            cy = M["m01"] / M["m00"]
+
+            if self._is_duplicate(cx, cy, found_centroids, dedup_radius):
+                continue
+            # Also check against rooms we're about to add in this batch
+            if self._is_duplicate(cx, cy, [r["centroid"] for r in rooms], dedup_radius):
+                continue
+
+            room = self._extract_room(seg_mask, min_room_area, min_room_dim, rp)
+            if room is not None:
+                rooms.append(room)
+
+        return rooms
 
     def _visualize_walls(self, img: np.ndarray, walls_mask: np.ndarray,
                          wall_segments: List) -> np.ndarray:

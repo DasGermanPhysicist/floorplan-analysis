@@ -49,16 +49,32 @@ class PlacementEngine:
         }
 
     def _place_beacons(self) -> List[Dict]:
-        """Place beacons: beacons_per_room in each detected room.
+        """Place beacons using a two-phase approach:
 
-        For 1 beacon: place at centroid.
-        For 2+: distribute evenly inside the room contour.
-        Additionally, large rooms always get extra grid-fill beacons.
+        Phase 1: Place beacons_per_room in each detected room (centroid + grid fill).
+        Phase 2: Fill remaining building interior (hallways, corridors, areas between
+                 rooms) with a grid at beacon_spacing to ensure full building coverage.
+
+        This matches real-world placement patterns where beacons cover every room
+        AND every corridor/hallway.
         """
         beacons = []
         bpr = max(1, getattr(self.config, 'beacons_per_room', 1))
         beacon_spacing_px = self.config.beacon_spacing_ft * self.scale
 
+        # Track which pixels are "covered" by a beacon
+        covered_mask = np.zeros((self.height, self.width), dtype=np.uint8)
+        cover_radius = int(beacon_spacing_px * 0.4)  # each beacon covers a disc
+
+        def mark_covered(x, y):
+            ix, iy = int(x), int(y)
+            y0 = max(0, iy - cover_radius)
+            y1 = min(self.height, iy + cover_radius + 1)
+            x0 = max(0, ix - cover_radius)
+            x1 = min(self.width, ix + cover_radius + 1)
+            covered_mask[y0:y1, x0:x1] = 255
+
+        # ── Phase 1: Room-based placement ──
         if self.rooms:
             for room in self.rooms:
                 cx, cy = room["centroid_x"], room["centroid_y"]
@@ -68,10 +84,8 @@ class PlacementEngine:
                 placed = []
 
                 if bpr == 1:
-                    # Single beacon at centroid
                     placed.append((cx, cy))
                 else:
-                    # Distribute beacons inside the room
                     placed.extend(self._distribute_in_room(room, bpr))
 
                 for px, py in placed:
@@ -82,15 +96,37 @@ class PlacementEngine:
                         "room_id": room["id"],
                         "placement_method": "room_centroid" if len(placed) == 1 else "distributed",
                     })
+                    mark_covered(px, py)
 
-                # Large rooms get additional grid beacons
+                # Grid fill for rooms larger than beacon spacing
                 w_px = room["bbox"]["w"]
                 h_px = room["bbox"]["h"]
-                if w_px > beacon_spacing_px * 1.5 or h_px > beacon_spacing_px * 1.5:
+                if w_px > beacon_spacing_px * 1.0 or h_px > beacon_spacing_px * 1.0:
                     extra = self._grid_fill_room(room, beacon_spacing_px)
-                    beacons.extend(extra)
-        else:
-            beacons = self._grid_place_inside_rooms(beacon_spacing_px)
+                    for e in extra:
+                        beacons.append(e)
+                        mark_covered(e["x"], e["y"])
+
+        # ── Phase 2: Fill uncovered building interior (hallways, corridors, gaps) ──
+        half = beacon_spacing_px * 0.5
+        x = half
+        while x < self.width - half:
+            y = half
+            while y < self.height - half:
+                ix, iy = int(x), int(y)
+                # Only place if: inside building, navigable, not already covered
+                if (self._is_inside_building(ix, iy) and
+                    self._is_navigable(ix, iy) and
+                    covered_mask[min(iy, self.height - 1), min(ix, self.width - 1)] == 0):
+                    beacons.append({
+                        "id": str(uuid.uuid4())[:8],
+                        "x": float(x),
+                        "y": float(y),
+                        "placement_method": "corridor_fill",
+                    })
+                    mark_covered(x, y)
+                y += beacon_spacing_px
+            x += beacon_spacing_px
 
         return beacons
 
