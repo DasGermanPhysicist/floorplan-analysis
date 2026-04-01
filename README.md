@@ -28,9 +28,22 @@ Automated infrastructure placement tool for Link Labs AirFinder 2 indoor asset t
 
 ## Installation
 
-### Option 1: Docker (Recommended) — One Command
+### Option 1: One-Click Installer (macOS)
 
-The easiest way to run the app. Requires only [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+Run a single command — it installs all dependencies, builds the app, and creates a desktop shortcut:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DasGermanPhysicist/floorplan-analysis/main/install.sh | bash
+```
+
+After installation, **double-click "Floorplan Analyzer" on your Desktop** to launch.
+
+> The installer automatically handles Homebrew, Python, Node.js, Poppler, and all dependencies.  
+> To update: re-run the same command — it pulls the latest version.
+
+### Option 2: Docker — One Command, Any OS
+
+Works on macOS, Linux, and Windows. Requires only [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 ```bash
 git clone https://github.com/DasGermanPhysicist/floorplan-analysis.git
@@ -40,11 +53,10 @@ docker compose up --build
 
 Open **http://localhost:8000** — that's it!
 
-> Data (uploads, processed images, saved projects) persists in Docker volumes between restarts.  
-> To stop: `docker compose down`  
-> To reset all data: `docker compose down -v`
+> Data persists in Docker volumes between restarts.  
+> To stop: `docker compose down` · To reset all data: `docker compose down -v`
 
-### Option 2: Manual Setup (Development)
+### Option 3: Manual Setup (Development)
 
 #### Prerequisites
 
