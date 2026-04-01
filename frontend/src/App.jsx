@@ -30,6 +30,7 @@ export default function App() {
     gateway_to_ap_ratio: 0.1,
     scale_pixels_per_ft: null,
     beacons_per_room: 1,
+    unit: 'ft',
   })
 
   // Derived: active floor data (what canvas & sidebar work with)
@@ -86,7 +87,7 @@ export default function App() {
       if (!res.ok) throw new Error((await res.json()).detail || 'Upload failed')
       const data = await res.json()
       setProject(data)
-      if (data.config) setConfig(data.config)
+      if (data.config) setConfig(prev => ({ ...prev, ...data.config, unit: data.config.unit || 'ft' }))
       setActiveFloorIndex(0)
       setActiveTab('setup')
     } catch (e) {
@@ -107,7 +108,7 @@ export default function App() {
       if (!res.ok) throw new Error((await res.json()).detail || 'Load failed')
       const data = await res.json()
       setProject(data)
-      if (data.config) setConfig(data.config)
+      if (data.config) setConfig(prev => ({ ...prev, ...data.config, unit: data.config.unit || 'ft' }))
       setActiveFloorIndex(0)
       setActiveTab('setup')
     } catch (e) {

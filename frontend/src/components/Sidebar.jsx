@@ -17,9 +17,18 @@ export default function Sidebar({
   roomDetectionParams, setRoomDetectionParams, onReprocess,
   selectedDevices, interactionMode, setInteractionMode, onBulkDelete, onShowStats,
 }) {
-  const [calibrationFt, setCalibrationFt] = useState('')
+  const [calibrationDist, setCalibrationDist] = useState('')
   const [editingFloorName, setEditingFloorName] = useState(null)
   const [floorNameDraft, setFloorNameDraft] = useState('')
+
+  const unit = config.unit || 'ft'
+  const FT_PER_M = 3.28084
+  const M_PER_FT = 1 / FT_PER_M
+  const unitLabel = unit === 'm' ? 'm' : 'ft'
+  // Convert internal feet value to display value in current unit
+  const toDisplay = (ftVal) => unit === 'm' ? ftVal * M_PER_FT : ftVal
+  // Convert display value back to internal feet
+  const toFeet = (displayVal) => unit === 'm' ? displayVal * FT_PER_M : displayVal
 
   const placements = activeFloor?.placements || { beacons: [], access_points: [], gateways: [] }
   const totalDevices = (placements.beacons?.length || 0) +
@@ -29,11 +38,13 @@ export default function Sidebar({
   const floors = project?.floors || []
 
   const handleCalibrationSubmit = () => {
-    if (calibrationPoints.length === 2 && calibrationFt) {
+    if (calibrationPoints.length === 2 && calibrationDist) {
       const dx = calibrationPoints[1].x - calibrationPoints[0].x
       const dy = calibrationPoints[1].y - calibrationPoints[0].y
       const pixelDist = Math.sqrt(dx * dx + dy * dy)
-      onCalibrateScale(pixelDist, parseFloat(calibrationFt))
+      // Backend always expects feet — convert if user entered meters
+      const realFt = unit === 'm' ? parseFloat(calibrationDist) * FT_PER_M : parseFloat(calibrationDist)
+      onCalibrateScale(pixelDist, realFt)
     }
   }
 
@@ -138,7 +149,9 @@ export default function Sidebar({
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">
                     <span className="w-2 h-2 bg-green-500 rounded-full" />
-                    Calibrated: {config.scale_pixels_per_ft.toFixed(1)} px/ft
+                    Calibrated: {unit === 'm'
+                      ? (config.scale_pixels_per_ft / M_PER_FT).toFixed(1) + ' px/m'
+                      : config.scale_pixels_per_ft.toFixed(1) + ' px/ft'}
                   </div>
                   <button
                     onClick={() => { setCalibrating(true); setConfig(prev => ({ ...prev, scale_pixels_per_ft: null })) }}
@@ -164,17 +177,17 @@ export default function Sidebar({
                   </div>
                   {calibrationPoints.length === 2 && (
                     <div className="space-y-2">
-                      <label className="text-xs font-medium text-gray-700">Real distance (ft):</label>
+                      <label className="text-xs font-medium text-gray-700">Real distance ({unitLabel}):</label>
                       <input
                         type="number"
-                        value={calibrationFt}
-                        onChange={e => setCalibrationFt(e.target.value)}
-                        placeholder="e.g. 50"
+                        value={calibrationDist}
+                        onChange={e => setCalibrationDist(e.target.value)}
+                        placeholder={unit === 'm' ? 'e.g. 15' : 'e.g. 50'}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-linklabs-500 focus:border-linklabs-500"
                       />
                       <button
                         onClick={handleCalibrationSubmit}
-                        disabled={!calibrationFt}
+                        disabled={!calibrationDist}
                         className="w-full px-3 py-2 bg-linklabs-600 text-white rounded-lg text-sm font-medium hover:bg-linklabs-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Set Scale
@@ -298,17 +311,35 @@ export default function Sidebar({
             {/* Placement Configuration */}
             <Section title="Placement Rules" icon={Settings}>
               <div className="space-y-3">
+                {/* Unit toggle */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-600">Units</span>
+                  <div className="flex bg-gray-100 rounded-lg p-0.5">
+                    <button
+                      onClick={() => setConfig(prev => ({ ...prev, unit: 'ft' }))}
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                        unit === 'ft' ? 'bg-white text-linklabs-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >Feet</button>
+                    <button
+                      onClick={() => setConfig(prev => ({ ...prev, unit: 'm' }))}
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                        unit === 'm' ? 'bg-white text-linklabs-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >Meters</button>
+                  </div>
+                </div>
                 <ConfigSlider
                   label="Beacon Spacing"
-                  value={config.beacon_spacing_ft}
-                  min={20} max={80} step={5} unit="ft"
-                  onChange={v => setConfig(prev => ({ ...prev, beacon_spacing_ft: v }))}
+                  value={Math.round(toDisplay(config.beacon_spacing_ft))}
+                  min={unit === 'm' ? 6 : 20} max={unit === 'm' ? 25 : 80} step={unit === 'm' ? 1 : 5} unit={unitLabel}
+                  onChange={v => setConfig(prev => ({ ...prev, beacon_spacing_ft: toFeet(v) }))}
                 />
                 <ConfigSlider
                   label="AP Spacing"
-                  value={config.ap_spacing_ft}
-                  min={50} max={200} step={10} unit="ft"
-                  onChange={v => setConfig(prev => ({ ...prev, ap_spacing_ft: v }))}
+                  value={Math.round(toDisplay(config.ap_spacing_ft))}
+                  min={unit === 'm' ? 15 : 50} max={unit === 'm' ? 60 : 200} step={unit === 'm' ? 5 : 10} unit={unitLabel}
+                  onChange={v => setConfig(prev => ({ ...prev, ap_spacing_ft: toFeet(v) }))}
                 />
                 <ConfigSlider
                   label="Gateway:AP Ratio"

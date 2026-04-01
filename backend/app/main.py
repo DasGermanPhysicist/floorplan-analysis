@@ -50,6 +50,7 @@ class PlacementConfig(BaseModel):
     gateway_to_ap_ratio: float = 0.1
     scale_pixels_per_ft: Optional[float] = None
     beacons_per_room: int = 1
+    unit: str = "ft"  # Display unit preference (ft or m) — not used in placement math
 
 
 class ScaleCalibration(BaseModel):
