@@ -16,6 +16,9 @@ backend/test_*.py
 node_modules/
 frontend/dist/
 
+# PDFs (customer data)
+*.pdf
+
 # OS
 .DS_Store
 *.swp
