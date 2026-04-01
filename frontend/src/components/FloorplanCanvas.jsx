@@ -13,7 +13,7 @@ export default function FloorplanCanvas({
   project, overlayMode, placementTool, calibrating, calibrationPoints,
   onClick, onDeviceDrag, onDeviceDelete,
   interactionMode, selectedDevices, setSelectedDevices,
-  onDeleteRoom, onDrawRoom, config,
+  onDeleteRoom, onDrawRoom, config, visibleLayers,
 }) {
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
@@ -113,8 +113,8 @@ export default function FloorplanCanvas({
     // Draw floorplan image
     ctx.drawImage(image, 0, 0)
 
-    // Draw rooms overlay (semi-transparent)
-    if (project.rooms) {
+    // Draw rooms overlay
+    if (project.rooms && project.rooms.length > 0 && visibleLayers?.rooms !== false) {
       const isDeleteMode = interactionMode === 'deleteRoom'
       const baseAlpha = isDeleteMode ? 0.2 : 0.08
       project.rooms.forEach((room, i) => {
@@ -141,11 +141,11 @@ export default function FloorplanCanvas({
       ctx.globalAlpha = 1
     }
 
-    // Draw placed devices
+    // Draw placed devices (filtered by layer visibility)
     const allDevices = [
-      ...(project.placements?.beacons || []).map(d => ({ ...d, type: 'beacon' })),
-      ...(project.placements?.access_points || []).map(d => ({ ...d, type: 'access_point' })),
-      ...(project.placements?.gateways || []).map(d => ({ ...d, type: 'gateway' })),
+      ...(visibleLayers?.beacons !== false ? (project.placements?.beacons || []).map(d => ({ ...d, type: 'beacon' })) : []),
+      ...(visibleLayers?.access_points !== false ? (project.placements?.access_points || []).map(d => ({ ...d, type: 'access_point' })) : []),
+      ...(visibleLayers?.gateways !== false ? (project.placements?.gateways || []).map(d => ({ ...d, type: 'gateway' })) : []),
     ]
 
     allDevices.forEach(device => {
@@ -156,7 +156,7 @@ export default function FloorplanCanvas({
       const isSelected = selectedDevices && selectedDevices.has(device.id)
 
       // Coverage radius visualization
-      if (device.type === 'access_point') {
+      if (device.type === 'access_point' && visibleLayers?.ap_coverage !== false) {
         const apRadiusPx = (config?.scale_pixels_per_ft && config?.ap_spacing_ft)
           ? (config.ap_spacing_ft / 2) * config.scale_pixels_per_ft
           : 150
@@ -180,16 +180,41 @@ export default function FloorplanCanvas({
         ctx.setLineDash([])
       }
 
-      // Device marker
-      ctx.beginPath()
-      ctx.arc(device.x, device.y, r * (isHovered ? 1.3 : 1), 0, Math.PI * 2)
+      // Device marker — distinct shapes per type
+      const s = r * (isHovered ? 1.3 : 1)
       ctx.fillStyle = isDragging ? colors.stroke : (isSelected ? '#f59e0b' : colors.fill)
-      ctx.fill()
       ctx.strokeStyle = isHovered ? '#fff' : (isSelected ? '#d97706' : colors.stroke)
       ctx.lineWidth = (isHovered ? 3 : 2) / zoom
+
+      ctx.beginPath()
+      if (device.type === 'beacon') {
+        // Diamond
+        ctx.moveTo(device.x, device.y - s * 1.2)
+        ctx.lineTo(device.x + s, device.y)
+        ctx.lineTo(device.x, device.y + s * 1.2)
+        ctx.lineTo(device.x - s, device.y)
+        ctx.closePath()
+      } else if (device.type === 'access_point') {
+        // Rounded square
+        const hs = s * 0.95
+        const rr = hs * 0.3
+        ctx.moveTo(device.x - hs + rr, device.y - hs)
+        ctx.arcTo(device.x + hs, device.y - hs, device.x + hs, device.y + hs, rr)
+        ctx.arcTo(device.x + hs, device.y + hs, device.x - hs, device.y + hs, rr)
+        ctx.arcTo(device.x - hs, device.y + hs, device.x - hs, device.y - hs, rr)
+        ctx.arcTo(device.x - hs, device.y - hs, device.x + hs, device.y - hs, rr)
+        ctx.closePath()
+      } else {
+        // Gateway: triangle (point up)
+        ctx.moveTo(device.x, device.y - s * 1.2)
+        ctx.lineTo(device.x + s * 1.1, device.y + s * 0.8)
+        ctx.lineTo(device.x - s * 1.1, device.y + s * 0.8)
+        ctx.closePath()
+      }
+      ctx.fill()
       ctx.stroke()
 
-      // Shadow
+      // Shadow on hover
       if (isHovered) {
         ctx.beginPath()
         ctx.arc(device.x, device.y, r * 1.6, 0, Math.PI * 2)
@@ -317,7 +342,7 @@ export default function FloorplanCanvas({
       ctx.textAlign = 'left'
       ctx.fillText('🗑️ Click a room to delete it', 14, 20)
     }
-  }, [image, zoom, offset, overlayMode, project, calibrating, calibrationPoints, placementTool, hoveredDevice, draggingDevice, selectedDevices, selectStart, selectEnd, drawingPoints, interactionMode, hoveredRoom, config])
+  }, [image, zoom, offset, overlayMode, project, calibrating, calibrationPoints, placementTool, hoveredDevice, draggingDevice, selectedDevices, selectStart, selectEnd, drawingPoints, interactionMode, hoveredRoom, config, visibleLayers])
 
   useEffect(() => {
     draw()

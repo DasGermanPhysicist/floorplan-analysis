@@ -23,6 +23,9 @@ export default function App() {
   const [selectedDevices, setSelectedDevices] = useState(new Set())
   // interactionMode: null | 'select' | 'drawRoom' | 'deleteRoom'
   const [interactionMode, setInteractionMode] = useState(null)
+  const [visibleLayers, setVisibleLayers] = useState({
+    beacons: true, access_points: true, gateways: true, rooms: true, ap_coverage: true,
+  })
 
   const [config, setConfig] = useState({
     beacon_spacing_ft: 45,
@@ -430,6 +433,8 @@ export default function App() {
             setInteractionMode={setInteractionMode}
             onBulkDelete={handleBulkDelete}
             onShowStats={() => setShowStats(true)}
+            visibleLayers={visibleLayers}
+            setVisibleLayers={setVisibleLayers}
           />
 
           <div className="flex-1 p-4 overflow-hidden">
@@ -450,6 +455,7 @@ export default function App() {
                 onDeleteRoom={handleDeleteRoom}
                 onDrawRoom={handleDrawRoom}
                 config={config}
+                visibleLayers={visibleLayers}
               />
             )}
           </div>

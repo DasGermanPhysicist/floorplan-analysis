@@ -16,6 +16,7 @@ export default function Sidebar({
   onRenameFloor, loading,
   roomDetectionParams, setRoomDetectionParams, onReprocess,
   selectedDevices, interactionMode, setInteractionMode, onBulkDelete, onShowStats,
+  visibleLayers, setVisibleLayers,
 }) {
   const [calibrationDist, setCalibrationDist] = useState('')
   const [editingFloorName, setEditingFloorName] = useState(null)
@@ -308,6 +309,12 @@ export default function Sidebar({
               </div>
             </Section>
 
+          </>
+        )}
+
+        {/* PLACE TAB */}
+        {activeTab === 'place' && (
+          <>
             {/* Placement Configuration */}
             <Section title="Placement Rules" icon={Settings}>
               <div className="space-y-3">
@@ -344,7 +351,7 @@ export default function Sidebar({
                 <ConfigSlider
                   label="Gateway:AP Ratio"
                   value={config.gateway_to_ap_ratio}
-                  min={0.05} max={0.5} step={0.05} unit=":1"
+                  min={0.02} max={0.2} step={0.02} unit=":1"
                   onChange={v => setConfig(prev => ({ ...prev, gateway_to_ap_ratio: v }))}
                   format={v => `1:${Math.round(1/v)}`}
                 />
@@ -357,12 +364,7 @@ export default function Sidebar({
                 />
               </div>
             </Section>
-          </>
-        )}
 
-        {/* PLACE TAB */}
-        {activeTab === 'place' && (
-          <>
             <Section title="Auto-Place" icon={Play}>
               {!config.scale_pixels_per_ft ? (
                 <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
@@ -371,7 +373,7 @@ export default function Sidebar({
               ) : (
                 <div className="space-y-2">
                   <button
-                    onClick={onAutoPlace}
+                    onClick={() => { if (window.confirm(`Auto-place will replace all existing devices on ${activeFloor?.name || 'this floor'}. Continue?`)) onAutoPlace() }}
                     disabled={loading}
                     className="w-full px-3 py-2 bg-linklabs-600 text-white rounded-lg text-sm font-medium hover:bg-linklabs-700 disabled:opacity-50 flex items-center justify-center gap-2"
                   >
@@ -380,7 +382,7 @@ export default function Sidebar({
                   </button>
                   {floors.length > 1 && (
                     <button
-                      onClick={onAutoPlaceAll}
+                      onClick={() => { if (window.confirm('Auto-place will replace all existing devices on ALL floors. Continue?')) onAutoPlaceAll() }}
                       disabled={loading}
                       className="w-full px-3 py-2 bg-white border border-linklabs-300 text-linklabs-700 rounded-lg text-sm font-medium hover:bg-linklabs-50 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
@@ -504,6 +506,28 @@ export default function Sidebar({
         {/* REVIEW TAB */}
         {activeTab === 'review' && (
           <>
+            <Section title="Layer Visibility" icon={Eye}>
+              <div className="space-y-1">
+                {[
+                  { key: 'beacons', label: 'Location Beacons', color: 'text-blue-600' },
+                  { key: 'access_points', label: 'Access Points', color: 'text-green-600' },
+                  { key: 'gateways', label: 'Gateways', color: 'text-purple-600' },
+                  { key: 'rooms', label: 'Detected Rooms', color: 'text-cyan-600' },
+                  { key: 'ap_coverage', label: 'AP Coverage Circles', color: 'text-emerald-600' },
+                ].map(layer => (
+                  <label key={layer.key} className="flex items-center gap-2 text-sm cursor-pointer py-1 px-2 rounded hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={visibleLayers?.[layer.key] !== false}
+                      onChange={e => setVisibleLayers(prev => ({ ...prev, [layer.key]: e.target.checked }))}
+                      className="rounded text-linklabs-600 focus:ring-linklabs-500"
+                    />
+                    <span className={layer.color}>{layer.label}</span>
+                  </label>
+                ))}
+              </div>
+            </Section>
+
             <Section title={`Devices — ${activeFloor?.name || 'Floor'}`} icon={Eye}>
               <div className="space-y-2">
                 <DeviceCount icon={Radio} label="Location Beacons" count={placements.beacons?.length || 0} color="text-blue-600" />
