@@ -248,6 +248,64 @@ async def upload_floorplan(
     })
 
 
+# ── Add floors to existing project ─────────────────────────────────────────
+
+@app.post("/api/add-floors")
+async def add_floors(
+    file: UploadFile = File(...),
+    project_id: str = Query(...),
+    skip_analysis: bool = Query(False),
+):
+    """Upload an additional file and append its pages as new floors to an existing project."""
+    if project_id not in projects:
+        raise HTTPException(404, "Project not found")
+
+    project = projects[project_id]
+    ext = Path(file.filename).suffix.lower()
+
+    if ext not in [".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".tiff"]:
+        raise HTTPException(400, "Unsupported file type. Use PDF, PNG, JPG, BMP, or TIFF.")
+
+    # Save the new file
+    file_id = str(uuid.uuid4())[:8]
+    upload_path = UPLOAD_DIR / f"{file_id}{ext}"
+    content = await file.read()
+    with open(upload_path, "wb") as f:
+        f.write(content)
+
+    num_pages = FloorplanProcessor.count_pages(str(upload_path))
+    existing_count = len(project["floors"])
+    default_rdp = RoomDetectionParams().model_dump()
+    new_floors = []
+
+    for page in range(1, num_pages + 1):
+        floor_index = existing_count + page - 1
+        floor_id = f"{project_id}_f{floor_index + 1}"
+        processor = FloorplanProcessor(
+            str(upload_path), floor_id, str(PROCESSED_DIR), page_number=page,
+        )
+        if skip_analysis:
+            result = processor.process_image_only()
+        else:
+            result = processor.process()
+        floor = {
+            "floor_index": floor_index,
+            "name": f"Floor {floor_index + 1}",
+            "processed": result,
+            "placements": {**EMPTY_PLACEMENTS},
+            "room_detection_params": {**default_rdp},
+        }
+        project["floors"].append(floor)
+        new_floors.append(floor)
+
+    return JSONResponse({
+        "project_id": project_id,
+        "num_floors": len(project["floors"]),
+        "floors": [_serialize_floor(f) for f in project["floors"]],
+        "new_floor_indices": list(range(existing_count, existing_count + len(new_floors))),
+    })
+
+
 # ── Reprocess rooms on a specific floor ─────────────────────────────────────
 
 @app.post("/api/reprocess")

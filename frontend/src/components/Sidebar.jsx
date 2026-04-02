@@ -18,10 +18,13 @@ export default function Sidebar({
   selectedDevices, interactionMode, setInteractionMode, onBulkDelete, onShowStats,
   visibleLayers, setVisibleLayers,
   rulerPoints, setRulerPoints,
+  onAddFloors,
 }) {
   const [calibrationDist, setCalibrationDist] = useState('')
   const [editingFloorName, setEditingFloorName] = useState(null)
   const [floorNameDraft, setFloorNameDraft] = useState('')
+  const addFloorsRef = React.useRef(null)
+  const [addFloorsSkipAnalysis, setAddFloorsSkipAnalysis] = useState(false)
 
   const unit = config.unit || 'ft'
   const FT_PER_M = 3.28084
@@ -71,48 +74,77 @@ export default function Sidebar({
   return (
     <aside className="w-80 bg-white border-r border-gray-200 flex flex-col overflow-y-auto shadow-sm">
       {/* Floor Selector */}
-      {floors.length > 1 && (
-        <div className="px-3 pt-3 pb-1">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <Layers className="w-3.5 h-3.5 text-gray-400" />
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Floors</span>
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {floors.map((f, idx) => (
-              <div key={idx} className="flex items-center">
-                {editingFloorName === idx ? (
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="text"
-                      value={floorNameDraft}
-                      onChange={e => setFloorNameDraft(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && commitRename()}
-                      className="w-24 px-1.5 py-0.5 text-xs border border-linklabs-400 rounded focus:outline-none"
-                      autoFocus
-                    />
-                    <button onClick={commitRename} className="p-0.5 text-green-600 hover:text-green-800">
-                      <Check className="w-3 h-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setActiveFloorIndex(idx)}
-                    onDoubleClick={() => startRename(idx, f.name)}
-                    title="Click to select, double-click to rename"
-                    className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
-                      activeFloorIndex === idx
-                        ? 'bg-linklabs-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {f.name}
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+      <div className="px-3 pt-3 pb-1">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Layers className="w-3.5 h-3.5 text-gray-400" />
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Floors</span>
         </div>
-      )}
+        <div className="flex flex-wrap gap-1 items-center">
+          {floors.map((f, idx) => (
+            <div key={idx} className="flex items-center">
+              {editingFloorName === idx ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={floorNameDraft}
+                    onChange={e => setFloorNameDraft(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && commitRename()}
+                    className="w-24 px-1.5 py-0.5 text-xs border border-linklabs-400 rounded focus:outline-none"
+                    autoFocus
+                  />
+                  <button onClick={commitRename} className="p-0.5 text-green-600 hover:text-green-800">
+                    <Check className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setActiveFloorIndex(idx)}
+                  onDoubleClick={() => startRename(idx, f.name)}
+                  title="Click to select, double-click to rename"
+                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
+                    activeFloorIndex === idx
+                      ? 'bg-linklabs-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {f.name}
+                </button>
+              )}
+            </div>
+          ))}
+          {/* Add Floors button */}
+          <input
+            ref={addFloorsRef}
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,.bmp,.tiff"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file && onAddFloors) {
+                onAddFloors(file, { skipAnalysis: addFloorsSkipAnalysis })
+              }
+              e.target.value = ''
+            }}
+          />
+          <button
+            onClick={() => addFloorsRef.current?.click()}
+            disabled={loading}
+            title="Add floors from another file"
+            className="px-2 py-1 text-xs rounded-md font-medium bg-gray-100 text-gray-500 hover:bg-linklabs-50 hover:text-linklabs-600 transition-colors disabled:opacity-50"
+          >
+            + Add
+          </button>
+        </div>
+        <label className="flex items-center gap-1.5 mt-1.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={addFloorsSkipAnalysis}
+            onChange={e => setAddFloorsSkipAnalysis(e.target.checked)}
+            className="rounded border-gray-300 text-linklabs-600 focus:ring-linklabs-500"
+          />
+          <span className="text-[10px] text-gray-500">Skip room analysis for new floors</span>
+        </label>
+      </div>
 
       {/* Tab Navigation */}
       <div className="flex border-b border-gray-200">

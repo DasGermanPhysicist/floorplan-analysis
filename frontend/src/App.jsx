@@ -214,6 +214,32 @@ export default function App() {
     }
   }, [resetUndo])
 
+  // ── Add floors to existing project ───────────────────────────────────────
+  const handleAddFloors = useCallback(async (file, options = {}) => {
+    if (!project) return
+    setLoading(true)
+    setError(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const params = new URLSearchParams({ project_id: project.project_id })
+      if (options.skipAnalysis) params.append('skip_analysis', 'true')
+      const res = await fetch(`${API_BASE}/api/add-floors?${params}`, { method: 'POST', body: formData })
+      if (!res.ok) throw new Error((await res.json()).detail || 'Add floors failed')
+      const data = await res.json()
+      snapshotBeforeMutation()
+      setProject(prev => ({ ...prev, floors: data.floors }))
+      // Jump to the first new floor
+      if (data.new_floor_indices?.length > 0) {
+        setActiveFloorIndex(data.new_floor_indices[0])
+      }
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [project, snapshotBeforeMutation])
+
   // ── Calibrate scale (per-floor with global fallback) ─────────────────────
   const handleCalibrateScale = useCallback(async (pixelDistance, realDistanceFt) => {
     if (!project) return
@@ -647,6 +673,7 @@ export default function App() {
             setVisibleLayers={setVisibleLayers}
             rulerPoints={rulerPoints}
             setRulerPoints={setRulerPoints}
+            onAddFloors={handleAddFloors}
           />
 
           <div className="flex-1 p-4 overflow-hidden">
