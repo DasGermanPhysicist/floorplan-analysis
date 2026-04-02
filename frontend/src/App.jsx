@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import Header from './components/Header'
 import UploadPanel from './components/UploadPanel'
 import Sidebar from './components/Sidebar'
@@ -21,8 +21,9 @@ export default function App() {
   const [showBOM, setShowBOM] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [selectedDevices, setSelectedDevices] = useState(new Set())
-  // interactionMode: null | 'select' | 'drawRoom' | 'deleteRoom'
+  // interactionMode: null | 'select' | 'drawRoom' | 'deleteRoom' | 'ruler'
   const [interactionMode, setInteractionMode] = useState(null)
+  const [rulerPoints, setRulerPoints] = useState([])
   const [visibleLayers, setVisibleLayers] = useState({
     beacons: true, access_points: true, gateways: true, rooms: true, ap_coverage: true,
   })
@@ -35,6 +36,54 @@ export default function App() {
     beacons_per_room: 1,
     unit: 'ft',
   })
+
+  // ── Autosave to localStorage ──────────────────────────────────────────────
+  const autosaveTimer = useRef(null)
+  useEffect(() => {
+    if (!project?.project_id) return
+    clearTimeout(autosaveTimer.current)
+    autosaveTimer.current = setTimeout(() => {
+      try {
+        localStorage.setItem('floorplan_autosave', JSON.stringify({
+          project_id: project.project_id,
+          config,
+          activeFloorIndex,
+          activeTab,
+          ts: Date.now(),
+        }))
+      } catch { /* quota exceeded — ignore */ }
+    }, 2000)
+    return () => clearTimeout(autosaveTimer.current)
+  }, [project, config, activeFloorIndex, activeTab])
+
+  // ── Restore session on mount ──────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('floorplan_autosave'))
+      if (!saved?.project_id) return
+      // Only restore if saved within the last 4 hours
+      if (Date.now() - saved.ts > 4 * 60 * 60 * 1000) {
+        localStorage.removeItem('floorplan_autosave')
+        return
+      }
+      fetch(`${API_BASE}/api/project/${saved.project_id}`)
+        .then(r => { if (!r.ok) throw new Error(); return r.json() })
+        .then(data => {
+          setProject(data)
+          if (saved.config) setConfig(prev => ({ ...prev, ...saved.config, unit: saved.config.unit || 'ft' }))
+          if (typeof saved.activeFloorIndex === 'number') setActiveFloorIndex(saved.activeFloorIndex)
+          if (saved.activeTab) setActiveTab(saved.activeTab)
+        })
+        .catch(() => localStorage.removeItem('floorplan_autosave'))
+    } catch { /* no saved session */ }
+  }, [])
+
+  // Listen for ruler cancel (Esc key in canvas)
+  useEffect(() => {
+    const handler = () => { setInteractionMode(null); setRulerPoints([]) }
+    window.addEventListener('ruler-cancel', handler)
+    return () => window.removeEventListener('ruler-cancel', handler)
+  }, [])
 
   // Derived: active floor data (what canvas & sidebar work with)
   const activeFloor = useMemo(() => {
@@ -80,13 +129,14 @@ export default function App() {
   }, [project, activeFloor])
 
   // ── Upload ──────────────────────────────────────────────────────────────────
-  const handleUpload = useCallback(async (file) => {
+  const handleUpload = useCallback(async (file, options = {}) => {
     setLoading(true)
     setError(null)
     try {
       const formData = new FormData()
       formData.append('file', file)
-      const res = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: formData })
+      const params = options.skipAnalysis ? '?skip_analysis=true' : ''
+      const res = await fetch(`${API_BASE}/api/upload${params}`, { method: 'POST', body: formData })
       if (!res.ok) throw new Error((await res.json()).detail || 'Upload failed')
       const data = await res.json()
       setProject(data)
@@ -121,7 +171,7 @@ export default function App() {
     }
   }, [])
 
-  // ── Calibrate scale (global) ──────────────────────────────────────────────
+  // ── Calibrate scale (per-floor with global fallback) ─────────────────────
   const handleCalibrateScale = useCallback(async (pixelDistance, realDistanceFt) => {
     if (!project) return
     try {
@@ -132,16 +182,24 @@ export default function App() {
           project_id: project.project_id,
           pixel_distance: pixelDistance,
           real_distance_ft: realDistanceFt,
+          floor_index: activeFloorIndex,
         }),
       })
       const data = await res.json()
+      // Update global config scale
       setConfig(prev => ({ ...prev, scale_pixels_per_ft: data.scale_pixels_per_ft }))
+      // Store per-floor scale on the floor object
+      setProject(prev => {
+        const floors = [...prev.floors]
+        floors[activeFloorIndex] = { ...floors[activeFloorIndex], scale_pixels_per_ft: data.scale_pixels_per_ft }
+        return { ...prev, floors }
+      })
       setCalibrating(false)
       setCalibrationPoints([])
     } catch (e) {
       setError(e.message)
     }
-  }, [project])
+  }, [project, activeFloorIndex])
 
   // ── Auto-place (per floor) ────────────────────────────────────────────────
   const handleAutoPlace = useCallback(async () => {
@@ -363,10 +421,17 @@ export default function App() {
       setCalibrationPoints(prev => [...prev, { x, y }])
       return
     }
+    if (interactionMode === 'ruler') {
+      setRulerPoints(prev => {
+        if (prev.length >= 2) return [{ x, y }]
+        return [...prev, { x, y }]
+      })
+      return
+    }
     if (placementTool) {
       handleManualPlace(placementTool, x, y, 'add')
     }
-  }, [calibrating, placementTool, handleManualPlace])
+  }, [calibrating, placementTool, handleManualPlace, interactionMode])
 
   const handleDeviceDrag = useCallback((deviceType, deviceId, newX, newY) => {
     handleManualPlace(deviceType, newX, newY, 'move', deviceId)
@@ -383,6 +448,7 @@ export default function App() {
     setSelectedDevices(new Set())
     setInteractionMode(null)
     setConfig(prev => ({ ...prev, scale_pixels_per_ft: null }))
+    localStorage.removeItem('floorplan_autosave')
   }, [])
 
   return (
@@ -435,6 +501,8 @@ export default function App() {
             onShowStats={() => setShowStats(true)}
             visibleLayers={visibleLayers}
             setVisibleLayers={setVisibleLayers}
+            rulerPoints={rulerPoints}
+            setRulerPoints={setRulerPoints}
           />
 
           <div className="flex-1 p-4 overflow-hidden">
@@ -456,6 +524,7 @@ export default function App() {
                 onDrawRoom={handleDrawRoom}
                 config={config}
                 visibleLayers={visibleLayers}
+                rulerPoints={rulerPoints}
               />
             )}
           </div>

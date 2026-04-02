@@ -42,6 +42,37 @@ class FloorplanProcessor:
         except Exception:
             return 1
 
+    def process_image_only(self) -> Dict[str, Any]:
+        """Load and save the image without any room/wall detection."""
+        img = self._load_image()
+        if img is None:
+            raise ValueError(f"Could not load image from {self.file_path}")
+
+        height, width = img.shape[:2]
+
+        image_filename = f"{self.project_id}_original.png"
+        cv2.imwrite(str(self.output_dir / image_filename), img)
+
+        # Create empty masks so placement engine doesn't crash
+        empty_mask = np.zeros((height, width), dtype=np.uint8)
+        np.save(str(self.output_dir / f"{self.project_id}_walls_mask.npy"), empty_mask)
+        np.save(str(self.output_dir / f"{self.project_id}_rooms_mask.npy"), empty_mask)
+        np.save(str(self.output_dir / f"{self.project_id}_building_mask.npy"), np.ones((height, width), dtype=np.uint8) * 255)
+
+        return {
+            "image_url": f"/processed/{image_filename}",
+            "walls_image_url": None,
+            "rooms_image_url": None,
+            "width": width,
+            "height": height,
+            "num_rooms": 0,
+            "walls": [],
+            "rooms": [],
+            "walls_mask_path": str(self.output_dir / f"{self.project_id}_walls_mask.npy"),
+            "rooms_mask_path": str(self.output_dir / f"{self.project_id}_rooms_mask.npy"),
+            "building_mask_path": str(self.output_dir / f"{self.project_id}_building_mask.npy"),
+        }
+
     def process(self) -> Dict[str, Any]:
         """Main processing pipeline."""
         img = self._load_image()

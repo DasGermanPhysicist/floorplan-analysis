@@ -124,7 +124,7 @@ EMPTY_PLACEMENTS = {"beacons": [], "access_points": [], "gateways": []}
 def _serialize_floor(floor: dict) -> dict:
     """Return a JSON-safe representation of a single floor."""
     p = floor["processed"]
-    return {
+    result = {
         "floor_index": floor["floor_index"],
         "name": floor["name"],
         "image_url": p["image_url"],
@@ -138,6 +138,9 @@ def _serialize_floor(floor: dict) -> dict:
         "placements": floor["placements"],
         "room_detection_params": floor["room_detection_params"],
     }
+    if floor.get("scale_pixels_per_ft") is not None:
+        result["scale_pixels_per_ft"] = floor["scale_pixels_per_ft"]
+    return result
 
 
 def _get_floor(project: dict, floor_index: int) -> dict:
@@ -154,7 +157,10 @@ projects = {}
 # ── Upload & multi-page processing ──────────────────────────────────────────
 
 @app.post("/api/upload")
-async def upload_floorplan(file: UploadFile = File(...)):
+async def upload_floorplan(
+    file: UploadFile = File(...),
+    skip_analysis: bool = Query(False),
+):
     """Upload a floorplan image or PDF. Multi-page PDFs create multiple floors."""
     project_id = str(uuid.uuid4())[:8]
     ext = Path(file.filename).suffix.lower()
@@ -176,7 +182,10 @@ async def upload_floorplan(file: UploadFile = File(...)):
         processor = FloorplanProcessor(
             str(upload_path), floor_id, str(PROCESSED_DIR), page_number=page,
         )
-        result = processor.process()
+        if skip_analysis:
+            result = processor.process_image_only()
+        else:
+            result = processor.process()
         floors.append({
             "floor_index": page - 1,
             "name": f"Floor {page}",
@@ -232,7 +241,7 @@ async def reprocess_rooms(
     return JSONResponse(_serialize_floor(floor))
 
 
-# ── Scale calibration (global) ───────────────────────────────────────────────
+# ── Scale calibration (per-floor with global fallback) ───────────────────────
 
 @app.post("/api/calibrate-scale")
 async def calibrate_scale(calibration: ScaleCalibration):
@@ -240,8 +249,15 @@ async def calibrate_scale(calibration: ScaleCalibration):
         raise HTTPException(404, "Project not found")
     project = projects[calibration.project_id]
     scale = calibration.pixel_distance / calibration.real_distance_ft
+
+    # Store on the specific floor
+    floor = _get_floor(project, calibration.floor_index)
+    floor["scale_pixels_per_ft"] = scale
+
+    # Also set as global default (used by floors without their own calibration)
     project["config"]["scale_pixels_per_ft"] = scale
-    return {"scale_pixels_per_ft": scale}
+
+    return {"scale_pixels_per_ft": scale, "floor_index": calibration.floor_index}
 
 
 # ── Auto-place on a specific floor ──────────────────────────────────────────
@@ -258,11 +274,18 @@ async def auto_place(
     if config:
         project["config"] = config.model_dump()
 
-    cfg = PlacementConfig(**project["config"])
+    floor = _get_floor(project, floor_index)
+
+    # Use floor-specific scale if available, otherwise global config
+    cfg_dict = dict(project["config"])
+    floor_scale = floor.get("scale_pixels_per_ft")
+    if floor_scale:
+        cfg_dict["scale_pixels_per_ft"] = floor_scale
+
+    cfg = PlacementConfig(**cfg_dict)
     if not cfg.scale_pixels_per_ft:
         raise HTTPException(400, "Scale not calibrated. Please calibrate first.")
 
-    floor = _get_floor(project, floor_index)
     engine = PlacementEngine(processed_data=floor["processed"], config=cfg)
     placements = engine.compute_placements()
     floor["placements"] = placements
@@ -734,6 +757,7 @@ async def save_project(project_id: str):
             floor_meta = {
                 "floor_index": floor["floor_index"],
                 "name": floor["name"],
+                "scale_pixels_per_ft": floor.get("scale_pixels_per_ft"),
                 "room_detection_params": floor["room_detection_params"],
                 "placements": floor["placements"],
                 "processed_keys": {
@@ -831,13 +855,16 @@ async def load_project(file: UploadFile = File(...)):
                 "rooms_mask_path": str(PROCESSED_DIR / f"{floor_id}_rooms_mask.npy"),
                 "building_mask_path": str(PROCESSED_DIR / f"{floor_id}_building_mask.npy"),
             }
-            floors.append({
+            floor_obj = {
                 "floor_index": fm["floor_index"],
                 "name": fm["name"],
                 "processed": processed,
                 "placements": fm.get("placements", {**EMPTY_PLACEMENTS}),
                 "room_detection_params": fm.get("room_detection_params", RoomDetectionParams().model_dump()),
-            })
+            }
+            if fm.get("scale_pixels_per_ft") is not None:
+                floor_obj["scale_pixels_per_ft"] = fm["scale_pixels_per_ft"]
+            floors.append(floor_obj)
 
         projects[project_id] = {
             "id": project_id,

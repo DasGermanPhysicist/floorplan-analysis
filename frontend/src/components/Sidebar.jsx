@@ -17,6 +17,7 @@ export default function Sidebar({
   roomDetectionParams, setRoomDetectionParams, onReprocess,
   selectedDevices, interactionMode, setInteractionMode, onBulkDelete, onShowStats,
   visibleLayers, setVisibleLayers,
+  rulerPoints, setRulerPoints,
 }) {
   const [calibrationDist, setCalibrationDist] = useState('')
   const [editingFloorName, setEditingFloorName] = useState(null)
@@ -144,73 +145,98 @@ export default function Sidebar({
         {/* SETUP TAB */}
         {activeTab === 'setup' && (
           <>
-            {/* Scale Calibration */}
+            {/* Scale Calibration (per-floor with global fallback) */}
             <Section title="Scale Calibration" icon={Ruler}>
-              {config.scale_pixels_per_ft ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">
-                    <span className="w-2 h-2 bg-green-500 rounded-full" />
-                    Calibrated: {unit === 'm'
-                      ? (config.scale_pixels_per_ft / M_PER_FT).toFixed(1) + ' px/m'
-                      : config.scale_pixels_per_ft.toFixed(1) + ' px/ft'}
-                  </div>
-                  <button
-                    onClick={() => { setCalibrating(true); setConfig(prev => ({ ...prev, scale_pixels_per_ft: null })) }}
-                    className="text-xs text-linklabs-600 hover:underline"
-                  >
-                    Recalibrate
-                  </button>
-                </div>
-              ) : calibrating ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-gray-600">
-                    Click two points on the floorplan with a known distance between them.
-                  </p>
-                  <div className="text-xs space-y-1">
-                    <div className={`flex items-center gap-2 ${calibrationPoints.length >= 1 ? 'text-green-600' : 'text-gray-400'}`}>
-                      <span className="w-4 h-4 rounded-full border-2 flex items-center justify-center text-[10px]">1</span>
-                      {calibrationPoints.length >= 1 ? 'Point 1 set' : 'Click first point'}
-                    </div>
-                    <div className={`flex items-center gap-2 ${calibrationPoints.length >= 2 ? 'text-green-600' : 'text-gray-400'}`}>
-                      <span className="w-4 h-4 rounded-full border-2 flex items-center justify-center text-[10px]">2</span>
-                      {calibrationPoints.length >= 2 ? 'Point 2 set' : 'Click second point'}
-                    </div>
-                  </div>
-                  {calibrationPoints.length === 2 && (
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-gray-700">Real distance ({unitLabel}):</label>
-                      <input
-                        type="number"
-                        value={calibrationDist}
-                        onChange={e => setCalibrationDist(e.target.value)}
-                        placeholder={unit === 'm' ? 'e.g. 15' : 'e.g. 50'}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-linklabs-500 focus:border-linklabs-500"
-                      />
+              {(() => {
+                const floorScale = activeFloor?.scale_pixels_per_ft
+                const globalScale = config.scale_pixels_per_ft
+                const effectiveScale = floorScale || globalScale
+                const isInherited = !floorScale && !!globalScale
+
+                if (calibrating) {
+                  return (
+                    <div className="space-y-3">
+                      <p className="text-xs text-gray-600">
+                        Click two points on the floorplan with a known distance between them.
+                      </p>
+                      <div className="text-xs space-y-1">
+                        <div className={`flex items-center gap-2 ${calibrationPoints.length >= 1 ? 'text-green-600' : 'text-gray-400'}`}>
+                          <span className="w-4 h-4 rounded-full border-2 flex items-center justify-center text-[10px]">1</span>
+                          {calibrationPoints.length >= 1 ? 'Point 1 set' : 'Click first point'}
+                        </div>
+                        <div className={`flex items-center gap-2 ${calibrationPoints.length >= 2 ? 'text-green-600' : 'text-gray-400'}`}>
+                          <span className="w-4 h-4 rounded-full border-2 flex items-center justify-center text-[10px]">2</span>
+                          {calibrationPoints.length >= 2 ? 'Point 2 set' : 'Click second point'}
+                        </div>
+                      </div>
+                      {calibrationPoints.length === 2 && (
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-gray-700">Real distance ({unitLabel}):</label>
+                          <input
+                            type="number"
+                            value={calibrationDist}
+                            onChange={e => setCalibrationDist(e.target.value)}
+                            placeholder={unit === 'm' ? 'e.g. 15' : 'e.g. 50'}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-linklabs-500 focus:border-linklabs-500"
+                          />
+                          <button
+                            onClick={handleCalibrationSubmit}
+                            disabled={!calibrationDist}
+                            className="w-full px-3 py-2 bg-linklabs-600 text-white rounded-lg text-sm font-medium hover:bg-linklabs-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Set Scale
+                          </button>
+                        </div>
+                      )}
                       <button
-                        onClick={handleCalibrationSubmit}
-                        disabled={!calibrationDist}
-                        className="w-full px-3 py-2 bg-linklabs-600 text-white rounded-lg text-sm font-medium hover:bg-linklabs-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => setCalibrating(false)}
+                        className="text-xs text-gray-500 hover:underline"
                       >
-                        Set Scale
+                        Cancel
                       </button>
                     </div>
-                  )}
+                  )
+                }
+
+                if (effectiveScale) {
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">
+                        <span className="w-2 h-2 bg-green-500 rounded-full" />
+                        {unit === 'm'
+                          ? (effectiveScale / M_PER_FT).toFixed(1) + ' px/m'
+                          : effectiveScale.toFixed(1) + ' px/ft'}
+                      </div>
+                      {isInherited && floors.length > 1 && (
+                        <p className="text-xs text-gray-500 italic">
+                          Using scale from another floor. Recalibrate if this floor has a different scale.
+                        </p>
+                      )}
+                      {!isInherited && floors.length > 1 && (
+                        <p className="text-xs text-gray-500 italic">
+                          Calibrated for {activeFloor?.name || 'this floor'}.
+                        </p>
+                      )}
+                      <button
+                        onClick={() => setCalibrating(true)}
+                        className="text-xs text-linklabs-600 hover:underline"
+                      >
+                        {isInherited ? 'Calibrate This Floor' : 'Recalibrate'}
+                      </button>
+                    </div>
+                  )
+                }
+
+                return (
                   <button
-                    onClick={() => { setCalibrating(false) }}
-                    className="text-xs text-gray-500 hover:underline"
+                    onClick={() => setCalibrating(true)}
+                    className="w-full px-3 py-2 bg-linklabs-600 text-white rounded-lg text-sm font-medium hover:bg-linklabs-700 flex items-center justify-center gap-2"
                   >
-                    Cancel
+                    <Ruler className="w-4 h-4" />
+                    Calibrate Scale
                   </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setCalibrating(true)}
-                  className="w-full px-3 py-2 bg-linklabs-600 text-white rounded-lg text-sm font-medium hover:bg-linklabs-700 flex items-center justify-center gap-2"
-                >
-                  <Ruler className="w-4 h-4" />
-                  Calibrate Scale
-                </button>
-              )}
+                )
+              })()}
             </Section>
 
             {/* Overlay */}
@@ -526,6 +552,45 @@ export default function Sidebar({
                   </label>
                 ))}
               </div>
+            </Section>
+
+            {/* Ruler / Measure Tool */}
+            <Section title="Measure" icon={Ruler}>
+              {interactionMode === 'ruler' ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-600">Click two points on the floorplan to measure the distance.</p>
+                  {rulerPoints?.length === 2 && (() => {
+                    const dx = rulerPoints[1].x - rulerPoints[0].x
+                    const dy = rulerPoints[1].y - rulerPoints[0].y
+                    const pxDist = Math.sqrt(dx * dx + dy * dy)
+                    const scale = config.scale_pixels_per_ft
+                    let label = `${Math.round(pxDist)} px`
+                    if (scale) {
+                      const ftDist = pxDist / scale
+                      label = unit === 'm' ? `${(ftDist * M_PER_FT).toFixed(1)} m` : `${ftDist.toFixed(1)} ft`
+                    }
+                    return (
+                      <div className="text-sm font-semibold text-orange-600 bg-orange-50 px-3 py-2 rounded-lg">
+                        Distance: {label}
+                      </div>
+                    )
+                  })()}
+                  <button
+                    onClick={() => { setInteractionMode(null); setRulerPoints([]) }}
+                    className="text-xs text-gray-500 hover:underline"
+                  >
+                    Done measuring
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setInteractionMode('ruler'); setRulerPoints([]) }}
+                  className="w-full px-3 py-2 bg-orange-50 border border-orange-200 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-100 flex items-center justify-center gap-2"
+                >
+                  <Ruler className="w-4 h-4" />
+                  Measure Distance
+                </button>
+              )}
             </Section>
 
             <Section title={`Devices — ${activeFloor?.name || 'Floor'}`} icon={Eye}>

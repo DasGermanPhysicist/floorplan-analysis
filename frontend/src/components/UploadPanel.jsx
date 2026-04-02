@@ -12,6 +12,7 @@ const PROCESSING_STEPS = [
 export default function UploadPanel({ onUpload, onLoadProject, loading }) {
   const [dragOver, setDragOver] = useState(false)
   const [stepIndex, setStepIndex] = useState(0)
+  const [skipAnalysis, setSkipAnalysis] = useState(false)
 
   // Animate through processing steps while loading
   useEffect(() => {
@@ -27,13 +28,13 @@ export default function UploadPanel({ onUpload, onLoadProject, loading }) {
     e.preventDefault()
     setDragOver(false)
     const file = e.dataTransfer.files[0]
-    if (file) onUpload(file)
-  }, [onUpload])
+    if (file) onUpload(file, { skipAnalysis })
+  }, [onUpload, skipAnalysis])
 
   const handleFileSelect = useCallback((e) => {
     const file = e.target.files[0]
-    if (file) onUpload(file)
-  }, [onUpload])
+    if (file) onUpload(file, { skipAnalysis })
+  }, [onUpload, skipAnalysis])
 
   return (
     <div className="flex-1 flex items-center justify-center p-8">
@@ -78,7 +79,16 @@ export default function UploadPanel({ onUpload, onLoadProject, loading }) {
                 onChange={handleFileSelect}
               />
             </label>
-            <p className="text-xs text-gray-400 mt-4">Supports PDF, PNG, JPG, BMP, TIFF</p>
+            <label className="flex items-center gap-2 mt-4 text-sm text-gray-500 cursor-pointer justify-center">
+              <input
+                type="checkbox"
+                checked={skipAnalysis}
+                onChange={e => setSkipAnalysis(e.target.checked)}
+                className="rounded text-linklabs-600 focus:ring-linklabs-500"
+              />
+              Skip room analysis (manual placement only)
+            </label>
+            <p className="text-xs text-gray-400 mt-2">Supports PDF, PNG, JPG, BMP, TIFF</p>
             {onLoadProject && (
               <div className="mt-6 pt-6 border-t border-gray-200">
                 <p className="text-sm text-gray-500 mb-3">Or load a previously saved project:</p>

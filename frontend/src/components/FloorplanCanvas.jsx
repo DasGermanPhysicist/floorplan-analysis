@@ -13,7 +13,7 @@ export default function FloorplanCanvas({
   project, overlayMode, placementTool, calibrating, calibrationPoints,
   onClick, onDeviceDrag, onDeviceDelete,
   interactionMode, selectedDevices, setSelectedDevices,
-  onDeleteRoom, onDrawRoom, config, visibleLayers,
+  onDeleteRoom, onDrawRoom, config, visibleLayers, rulerPoints,
 }) {
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
@@ -307,6 +307,59 @@ export default function FloorplanCanvas({
       }
     }
 
+    // Draw ruler measurement line
+    if (rulerPoints && rulerPoints.length >= 1) {
+      const p1 = rulerPoints[0]
+      ctx.beginPath()
+      ctx.arc(p1.x, p1.y, 5 / zoom, 0, Math.PI * 2)
+      ctx.fillStyle = '#f97316'
+      ctx.fill()
+
+      if (rulerPoints.length === 2) {
+        const p2 = rulerPoints[1]
+        ctx.beginPath()
+        ctx.moveTo(p1.x, p1.y)
+        ctx.lineTo(p2.x, p2.y)
+        ctx.strokeStyle = '#f97316'
+        ctx.lineWidth = 2 / zoom
+        ctx.setLineDash([6 / zoom, 4 / zoom])
+        ctx.stroke()
+        ctx.setLineDash([])
+
+        ctx.beginPath()
+        ctx.arc(p2.x, p2.y, 5 / zoom, 0, Math.PI * 2)
+        ctx.fillStyle = '#f97316'
+        ctx.fill()
+
+        // Calculate and show distance
+        const dx = p2.x - p1.x
+        const dy = p2.y - p1.y
+        const pxDist = Math.sqrt(dx * dx + dy * dy)
+        const scale = config?.scale_pixels_per_ft
+        const unitPref = config?.unit || 'ft'
+        let label = `${Math.round(pxDist)} px`
+        if (scale) {
+          const ftDist = pxDist / scale
+          if (unitPref === 'm') {
+            label = `${(ftDist / 3.28084).toFixed(1)} m`
+          } else {
+            label = `${ftDist.toFixed(1)} ft`
+          }
+        }
+        const mx = (p1.x + p2.x) / 2
+        const my = (p1.y + p2.y) / 2
+        ctx.font = `bold ${Math.max(12, 14 / zoom)}px sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'bottom'
+        // Background for readability
+        const tw = ctx.measureText(label).width + 8 / zoom
+        ctx.fillStyle = 'rgba(255,255,255,0.85)'
+        ctx.fillRect(mx - tw / 2, my - 20 / zoom, tw, 18 / zoom)
+        ctx.fillStyle = '#f97316'
+        ctx.fillText(label, mx, my - 4 / zoom)
+      }
+    }
+
     ctx.restore()
 
     // Cursor indicator for placement tool
@@ -341,8 +394,13 @@ export default function FloorplanCanvas({
       ctx.font = 'bold 11px sans-serif'
       ctx.textAlign = 'left'
       ctx.fillText('🗑️ Click a room to delete it', 14, 20)
+    } else if (interactionMode === 'ruler') {
+      ctx.fillStyle = '#f97316'
+      ctx.font = 'bold 11px sans-serif'
+      ctx.textAlign = 'left'
+      ctx.fillText('📏 Click two points to measure — Esc to cancel', 14, 20)
     }
-  }, [image, zoom, offset, overlayMode, project, calibrating, calibrationPoints, placementTool, hoveredDevice, draggingDevice, selectedDevices, selectStart, selectEnd, drawingPoints, interactionMode, hoveredRoom, config, visibleLayers])
+  }, [image, zoom, offset, overlayMode, project, calibrating, calibrationPoints, placementTool, hoveredDevice, draggingDevice, selectedDevices, selectStart, selectEnd, drawingPoints, interactionMode, hoveredRoom, config, visibleLayers, rulerPoints])
 
   useEffect(() => {
     draw()
@@ -566,6 +624,20 @@ export default function FloorplanCanvas({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [interactionMode, drawingPoints, onDrawRoom])
+
+  // Keyboard: Escape to cancel ruler mode
+  useEffect(() => {
+    if (interactionMode !== 'ruler') return
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        // Dispatch a custom event so App can clear ruler state
+        window.dispatchEvent(new CustomEvent('ruler-cancel'))
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [interactionMode])
 
   // Reset drawing points when mode changes away from drawRoom
   useEffect(() => {
