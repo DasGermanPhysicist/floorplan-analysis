@@ -6,11 +6,18 @@ Automated infrastructure placement tool for Link Labs AirFinder 2 indoor asset t
 
 - **Multi-Floor PDF Support** — Upload multi-page PDFs, each page becomes a floor
 - **Wall & Room Detection** — OpenCV-powered computer vision pipeline
-- **Scale Calibration** — Click two known points to set real-world scale
-- **Auto-Placement** — Automatically place location beacons, access points, and gateways
+- **Skip Analysis Mode** — Upload without room detection for manual-only placement
+- **Per-Floor Scale Calibration** — Calibrate each floor independently, or use one scale for all
+- **Feet / Meters Toggle** — Switch display units; backend stays in feet internally
+- **Auto-Placement** — Automatically place location beacons, access points, and gateways (with confirmation dialog)
 - **AP Coverage Guarantee** — Every beacon is within the coverage disc of at least one AP
 - **Manual Adjustment** — Drag-and-drop devices, right-click to remove, bulk select/delete
 - **Draw & Delete Rooms** — Manually draw room polygons or remove detected rooms
+- **Layer Visibility** — Toggle beacons, APs, gateways, rooms, and AP coverage circles on/off
+- **Distinct Device Shapes** — Diamond (beacon), rounded square (AP), triangle (gateway)
+- **Ruler / Measure Tool** — Click two points to measure distance in current units
+- **Keyboard Shortcuts** — Quick keys for tabs, placement, measure, save (click ⌨ in header)
+- **Autosave** — Session auto-saved to browser; restored on reload within 4 hours
 - **Floor Renaming** — Double-click a floor to rename it
 - **Room Statistics** — View total rooms, area, and per-floor breakdown
 - **Save/Load Projects** — Save your work as a `.zip` and load it later
@@ -20,9 +27,9 @@ Automated infrastructure placement tool for Link Labs AirFinder 2 indoor asset t
 
 | Device | Default Spacing | Notes |
 |--------|----------------|-------|
-| Location Beacon | 30–60 ft (default 45) | Per-room placement with grid fill for large rooms |
-| Access Point | ~100 ft | Placed to cover all beacons within AP spacing / 2 |
-| Gateway | 1:10 AP ratio | K-means clustered among APs |
+| Location Beacon | 20–80 ft / 6–25 m (default 45 ft) | Per-room placement with grid fill for large rooms |
+| Access Point | 50–200 ft / 15–60 m (default 100 ft) | Placed to cover all beacons within AP spacing / 2 |
+| Gateway | 1:5 – 1:50 AP ratio (default 1:10) | K-means clustered among APs |
 
 ---
 
@@ -99,12 +106,26 @@ Open **http://localhost:5173**
 
 ## Workflow
 
-1. **Upload** a floorplan (PDF or image) — multi-page PDFs create one floor per page
-2. **Calibrate** the scale by clicking two points with a known distance
-3. **Adjust** placement rules (beacon spacing, AP spacing, gateway ratio, beacons per room)
+1. **Upload** a floorplan (PDF or image) — optionally skip room analysis for manual-only mode
+2. **Calibrate** the scale by clicking two points with a known distance (per-floor or shared)
+3. **Adjust** placement rules on the Place tab (beacon spacing, AP spacing, gateway ratio, units)
 4. **Auto-Place** devices on the current floor or all floors at once
-5. **Refine** — drag devices, draw/delete rooms, bulk select and remove devices
-6. **Export** — download BOM, annotated PDF, or save the full project as a `.zip`
+5. **Refine** — drag devices, draw/delete rooms, bulk select and remove, use the ruler to verify
+6. **Review** — toggle layer visibility, check device counts, measure distances
+7. **Export** — download BOM, annotated PDF, or save the full project as a `.zip`
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `1` / `2` / `3` | Switch to Setup / Place / Review tab |
+| `B` | Toggle beacon placement tool |
+| `A` | Toggle access point placement tool |
+| `G` | Toggle gateway placement tool |
+| `M` | Toggle ruler / measure tool |
+| `Esc` | Cancel current mode |
+| `Delete` | Delete selected devices |
+| `⌘/Ctrl + S` | Save project |
 
 ## Tech Stack
 
