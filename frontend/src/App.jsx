@@ -47,19 +47,36 @@ export default function App() {
     pushUndo({ project, config })
   }, [project, config, pushUndo])
 
+  // Sync restored state back to backend so subsequent mutations are consistent
+  const syncBackend = useCallback(async (proj) => {
+    if (!proj?.project_id || !proj.floors) return
+    try {
+      await fetch(`${API_BASE}/api/restore-state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: proj.project_id,
+          floors: proj.floors,
+        }),
+      })
+    } catch { /* best-effort sync */ }
+  }, [])
+
   const handleUndo = useCallback(() => {
     const snap = undo()
     if (!snap) return
     setProject(snap.project)
     setConfig(snap.config)
-  }, [undo])
+    syncBackend(snap.project)
+  }, [undo, syncBackend])
 
   const handleRedo = useCallback(() => {
     const snap = redo()
     if (!snap) return
     setProject(snap.project)
     setConfig(snap.config)
-  }, [redo])
+    syncBackend(snap.project)
+  }, [redo, syncBackend])
 
   // ── Autosave to localStorage ──────────────────────────────────────────────
   const autosaveTimer = useRef(null)

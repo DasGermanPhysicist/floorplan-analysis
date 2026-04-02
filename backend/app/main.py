@@ -154,6 +154,43 @@ def _get_floor(project: dict, floor_index: int) -> dict:
 projects = {}
 
 
+# ── Restore state (undo/redo sync) ──────────────────────────────────────────
+
+class RestoreRequest(BaseModel):
+    project_id: str
+    floors: list  # full floors array from frontend snapshot
+
+
+@app.post("/api/restore-state")
+async def restore_state(req: RestoreRequest):
+    """Sync backend in-memory state with frontend after undo/redo."""
+    project = projects.get(req.project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    for floor_data in req.floors:
+        idx = floor_data.get("floor_index", 0)
+        floor = None
+        for f in project["floors"]:
+            if f["floor_index"] == idx:
+                floor = f
+                break
+        if not floor:
+            continue
+        # Restore placements
+        if "placements" in floor_data:
+            floor["placements"] = floor_data["placements"]
+        # Restore rooms
+        if "rooms" in floor_data:
+            floor["processed"]["rooms"] = floor_data["rooms"]
+            floor["processed"]["num_rooms"] = len(floor_data["rooms"])
+        # Restore per-floor scale
+        if "scale_pixels_per_ft" in floor_data:
+            floor["scale_pixels_per_ft"] = floor_data["scale_pixels_per_ft"]
+
+    return {"status": "ok"}
+
+
 # ── Upload & multi-page processing ──────────────────────────────────────────
 
 @app.post("/api/upload")
