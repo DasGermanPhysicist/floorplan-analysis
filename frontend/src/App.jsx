@@ -85,74 +85,6 @@ export default function App() {
     return () => window.removeEventListener('ruler-cancel', handler)
   }, [])
 
-  // ── Global keyboard shortcuts ───────────────────────────────────────────────
-  useEffect(() => {
-    const handler = (e) => {
-      // Ignore if typing in an input/textarea
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
-      if (!project) return
-
-      const key = e.key.toLowerCase()
-
-      // Tab navigation: 1 = Setup, 2 = Place, 3 = Review
-      if (key === '1') { setActiveTab('setup'); return }
-      if (key === '2') { setActiveTab('place'); return }
-      if (key === '3') { setActiveTab('review'); return }
-
-      // Escape: cancel any active mode
-      if (key === 'escape') {
-        setInteractionMode(null)
-        setPlacementTool(null)
-        setCalibrating(false)
-        setRulerPoints([])
-        setSelectedDevices(new Set())
-        return
-      }
-
-      // M = measure (ruler)
-      if (key === 'm' && !e.metaKey && !e.ctrlKey) {
-        setInteractionMode(prev => prev === 'ruler' ? null : 'ruler')
-        setRulerPoints([])
-        return
-      }
-
-      // S = save project (Cmd/Ctrl+S)
-      if (key === 's' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        if (project) window.open(`${API_BASE}/api/save-project/${project.project_id}`, '_blank')
-        return
-      }
-
-      // B = place beacon
-      if (key === 'b' && !e.metaKey && !e.ctrlKey) {
-        setPlacementTool(prev => prev === 'beacon' ? null : 'beacon')
-        setInteractionMode(null)
-        return
-      }
-      // A = place access point
-      if (key === 'a' && !e.metaKey && !e.ctrlKey) {
-        setPlacementTool(prev => prev === 'access_point' ? null : 'access_point')
-        setInteractionMode(null)
-        return
-      }
-      // G = place gateway
-      if (key === 'g' && !e.metaKey && !e.ctrlKey) {
-        setPlacementTool(prev => prev === 'gateway' ? null : 'gateway')
-        setInteractionMode(null)
-        return
-      }
-
-      // Delete/Backspace = delete selected devices
-      if ((key === 'delete' || key === 'backspace') && selectedDevices.size > 0) {
-        e.preventDefault()
-        handleBulkDelete()
-        return
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [project, selectedDevices, handleBulkDelete])
-
   // Derived: active floor data (what canvas & sidebar work with)
   const activeFloor = useMemo(() => {
     if (!project?.floors) return null
@@ -428,6 +360,74 @@ export default function App() {
       setLoading(false)
     }
   }, [project, activeFloorIndex, selectedDevices])
+
+  // ── Global keyboard shortcuts ───────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      // Ignore if typing in an input/textarea
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+      if (!project) return
+
+      const key = e.key.toLowerCase()
+
+      // Tab navigation: 1 = Setup, 2 = Place, 3 = Review
+      if (key === '1') { setActiveTab('setup'); return }
+      if (key === '2') { setActiveTab('place'); return }
+      if (key === '3') { setActiveTab('review'); return }
+
+      // Escape: cancel any active mode
+      if (key === 'escape') {
+        setInteractionMode(null)
+        setPlacementTool(null)
+        setCalibrating(false)
+        setRulerPoints([])
+        setSelectedDevices(new Set())
+        return
+      }
+
+      // M = measure (ruler)
+      if (key === 'm' && !e.metaKey && !e.ctrlKey) {
+        setInteractionMode(prev => prev === 'ruler' ? null : 'ruler')
+        setRulerPoints([])
+        return
+      }
+
+      // S = save project (Cmd/Ctrl+S)
+      if (key === 's' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        if (project) window.open(`${API_BASE}/api/save-project/${project.project_id}`, '_blank')
+        return
+      }
+
+      // B = place beacon
+      if (key === 'b' && !e.metaKey && !e.ctrlKey) {
+        setPlacementTool(prev => prev === 'beacon' ? null : 'beacon')
+        setInteractionMode(null)
+        return
+      }
+      // A = place access point
+      if (key === 'a' && !e.metaKey && !e.ctrlKey) {
+        setPlacementTool(prev => prev === 'access_point' ? null : 'access_point')
+        setInteractionMode(null)
+        return
+      }
+      // G = place gateway
+      if (key === 'g' && !e.metaKey && !e.ctrlKey) {
+        setPlacementTool(prev => prev === 'gateway' ? null : 'gateway')
+        setInteractionMode(null)
+        return
+      }
+
+      // Delete/Backspace = delete selected devices
+      if ((key === 'delete' || key === 'backspace') && selectedDevices.size > 0) {
+        e.preventDefault()
+        handleBulkDelete()
+        return
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [project, selectedDevices, handleBulkDelete])
 
   // ── Delete room ───────────────────────────────────────────────────────────
   const handleDeleteRoom = useCallback(async (roomId) => {
