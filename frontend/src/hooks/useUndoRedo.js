@@ -5,15 +5,9 @@ const MAX_HISTORY = 50
 export default function useUndoRedo() {
   const historyRef = useRef([])
   const pointerRef = useRef(-1)
-  const isUndoRedoRef = useRef(false)
 
-  // Push a new snapshot (deep-cloned). Called after every mutation.
+  // Push a new snapshot (deep-cloned). Called explicitly after each mutation.
   const pushState = useCallback((snapshot) => {
-    // Don't record if this change came from undo/redo itself
-    if (isUndoRedoRef.current) {
-      isUndoRedoRef.current = false
-      return
-    }
     const clone = JSON.parse(JSON.stringify(snapshot))
     // Truncate any redo entries ahead of pointer
     historyRef.current = historyRef.current.slice(0, pointerRef.current + 1)
@@ -29,7 +23,6 @@ export default function useUndoRedo() {
   const undo = useCallback(() => {
     if (pointerRef.current <= 0) return null
     pointerRef.current -= 1
-    isUndoRedoRef.current = true
     return JSON.parse(JSON.stringify(historyRef.current[pointerRef.current]))
   }, [])
 
@@ -37,7 +30,6 @@ export default function useUndoRedo() {
   const redo = useCallback(() => {
     if (pointerRef.current >= historyRef.current.length - 1) return null
     pointerRef.current += 1
-    isUndoRedoRef.current = true
     return JSON.parse(JSON.stringify(historyRef.current[pointerRef.current]))
   }, [])
 

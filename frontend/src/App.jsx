@@ -40,19 +40,16 @@ export default function App() {
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────
   const { pushState: pushUndo, undo, redo, reset: resetUndo } = useUndoRedo()
-  const undoingRef = useRef(false)
 
-  // Auto-record snapshot whenever project changes (skip undo/redo restores)
-  useEffect(() => {
+  // Explicitly record a snapshot before a mutation happens
+  const snapshotBeforeMutation = useCallback(() => {
     if (!project) return
-    if (undoingRef.current) { undoingRef.current = false; return }
     pushUndo({ project, config })
-  }, [project]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [project, config, pushUndo])
 
   const handleUndo = useCallback(() => {
     const snap = undo()
     if (!snap) return
-    undoingRef.current = true
     setProject(snap.project)
     setConfig(snap.config)
   }, [undo])
@@ -60,7 +57,6 @@ export default function App() {
   const handleRedo = useCallback(() => {
     const snap = redo()
     if (!snap) return
-    undoingRef.current = true
     setProject(snap.project)
     setConfig(snap.config)
   }, [redo])
@@ -216,6 +212,7 @@ export default function App() {
         }),
       })
       const data = await res.json()
+      snapshotBeforeMutation()
       // Update global config scale
       setConfig(prev => ({ ...prev, scale_pixels_per_ft: data.scale_pixels_per_ft }))
       // Store per-floor scale on the floor object
@@ -229,7 +226,7 @@ export default function App() {
     } catch (e) {
       setError(e.message)
     }
-  }, [project, activeFloorIndex])
+  }, [project, activeFloorIndex, snapshotBeforeMutation])
 
   // ── Auto-place (per floor) ────────────────────────────────────────────────
   const handleAutoPlace = useCallback(async () => {
@@ -243,6 +240,7 @@ export default function App() {
       )
       if (!res.ok) throw new Error((await res.json()).detail || 'Auto-placement failed')
       const data = await res.json()
+      snapshotBeforeMutation()
       setProject(prev => {
         const floors = [...prev.floors]
         floors[activeFloorIndex] = { ...floors[activeFloorIndex], placements: data.placements }
@@ -254,11 +252,12 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [project, config, activeFloorIndex])
+  }, [project, config, activeFloorIndex, snapshotBeforeMutation])
 
   // ── Manual placement (per floor) ──────────────────────────────────────────
   const handleManualPlace = useCallback(async (deviceType, x, y, action, deviceId) => {
     if (!project) return
+    snapshotBeforeMutation()
     try {
       const res = await fetch(`${API_BASE}/api/manual-adjust`, {
         method: 'POST',
@@ -281,11 +280,12 @@ export default function App() {
     } catch (e) {
       setError(e.message)
     }
-  }, [project, activeFloorIndex])
+  }, [project, activeFloorIndex, snapshotBeforeMutation])
 
   // ── Reprocess rooms (per floor) ───────────────────────────────────────────
   const handleReprocess = useCallback(async (params) => {
     if (!project) return
+    snapshotBeforeMutation()
     setLoading(true)
     setError(null)
     try {
@@ -351,6 +351,7 @@ export default function App() {
       )
       if (!res.ok) throw new Error((await res.json()).detail || 'Auto-placement failed')
       const data = await res.json()
+      snapshotBeforeMutation()
       setProject(prev => ({ ...prev, floors: data.floors }))
       setActiveTab('review')
     } catch (e) {
@@ -358,11 +359,12 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [project, config])
+  }, [project, config, snapshotBeforeMutation])
 
   // ── Bulk delete selected devices ──────────────────────────────────────────
   const handleBulkDelete = useCallback(async () => {
     if (!project || selectedDevices.size === 0) return
+    snapshotBeforeMutation()
     setLoading(true)
     setError(null)
     try {
@@ -389,7 +391,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [project, activeFloorIndex, selectedDevices])
+  }, [project, activeFloorIndex, selectedDevices, snapshotBeforeMutation])
 
   // ── Global keyboard shortcuts ───────────────────────────────────────────────
   useEffect(() => {
@@ -475,6 +477,7 @@ export default function App() {
   // ── Delete room ───────────────────────────────────────────────────────────
   const handleDeleteRoom = useCallback(async (roomId) => {
     if (!project) return
+    snapshotBeforeMutation()
     setError(null)
     try {
       const res = await fetch(`${API_BASE}/api/delete-room`, {
@@ -497,11 +500,12 @@ export default function App() {
     } catch (e) {
       setError(e.message)
     }
-  }, [project, activeFloorIndex])
+  }, [project, activeFloorIndex, snapshotBeforeMutation])
 
   // ── Draw room ─────────────────────────────────────────────────────────────
   const handleDrawRoom = useCallback(async (contour) => {
     if (!project) return
+    snapshotBeforeMutation()
     setError(null)
     try {
       const res = await fetch(`${API_BASE}/api/draw-room`, {
@@ -524,7 +528,7 @@ export default function App() {
     } catch (e) {
       setError(e.message)
     }
-  }, [project, activeFloorIndex])
+  }, [project, activeFloorIndex, snapshotBeforeMutation])
 
   // ── Canvas interactions ───────────────────────────────────────────────────
   const handleCanvasClick = useCallback((x, y) => {
