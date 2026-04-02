@@ -123,6 +123,8 @@ Open **http://localhost:5173**
 | `A` | Toggle access point placement tool |
 | `G` | Toggle gateway placement tool |
 | `M` | Toggle ruler / measure tool |
+| `⌘/Ctrl + Z` | Undo |
+| `⌘/Ctrl + Shift + Z` | Redo |
 | `Esc` | Cancel current mode |
 | `Delete` | Delete selected devices |
 | `⌘/Ctrl + S` | Save project |

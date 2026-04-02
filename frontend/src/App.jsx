@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar'
 import FloorplanCanvas from './components/FloorplanCanvas'
 import BOMPanel from './components/BOMPanel'
 import StatsPanel from './components/StatsPanel'
+import useUndoRedo from './hooks/useUndoRedo'
 
 const API_BASE = ''
 
@@ -36,6 +37,33 @@ export default function App() {
     beacons_per_room: 1,
     unit: 'ft',
   })
+
+  // ── Undo / Redo ──────────────────────────────────────────────────────────
+  const { pushState: pushUndo, undo, redo, reset: resetUndo } = useUndoRedo()
+  const undoingRef = useRef(false)
+
+  // Auto-record snapshot whenever project changes (skip undo/redo restores)
+  useEffect(() => {
+    if (!project) return
+    if (undoingRef.current) { undoingRef.current = false; return }
+    pushUndo({ project, config })
+  }, [project]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleUndo = useCallback(() => {
+    const snap = undo()
+    if (!snap) return
+    undoingRef.current = true
+    setProject(snap.project)
+    setConfig(snap.config)
+  }, [undo])
+
+  const handleRedo = useCallback(() => {
+    const snap = redo()
+    if (!snap) return
+    undoingRef.current = true
+    setProject(snap.project)
+    setConfig(snap.config)
+  }, [redo])
 
   // ── Autosave to localStorage ──────────────────────────────────────────────
   const autosaveTimer = useRef(null)
@@ -139,6 +167,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/api/upload${params}`, { method: 'POST', body: formData })
       if (!res.ok) throw new Error((await res.json()).detail || 'Upload failed')
       const data = await res.json()
+      resetUndo()
       setProject(data)
       if (data.config) setConfig(prev => ({ ...prev, ...data.config, unit: data.config.unit || 'ft' }))
       setActiveFloorIndex(0)
@@ -148,7 +177,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [resetUndo])
 
   // ── Load saved project ────────────────────────────────────────────────────
   const handleLoadProject = useCallback(async (file) => {
@@ -160,6 +189,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/api/load-project`, { method: 'POST', body: formData })
       if (!res.ok) throw new Error((await res.json()).detail || 'Load failed')
       const data = await res.json()
+      resetUndo()
       setProject(data)
       if (data.config) setConfig(prev => ({ ...prev, ...data.config, unit: data.config.unit || 'ft' }))
       setActiveFloorIndex(0)
@@ -169,7 +199,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [resetUndo])
 
   // ── Calibrate scale (per-floor with global fallback) ─────────────────────
   const handleCalibrateScale = useCallback(async (pixelDistance, realDistanceFt) => {
@@ -370,6 +400,19 @@ export default function App() {
 
       const key = e.key.toLowerCase()
 
+      // Undo: Cmd/Ctrl+Z
+      if (key === 'z' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+        return
+      }
+      // Redo: Cmd/Ctrl+Shift+Z
+      if (key === 'z' && (e.metaKey || e.ctrlKey) && e.shiftKey) {
+        e.preventDefault()
+        handleRedo()
+        return
+      }
+
       // Tab navigation: 1 = Setup, 2 = Place, 3 = Review
       if (key === '1') { setActiveTab('setup'); return }
       if (key === '2') { setActiveTab('place'); return }
@@ -427,7 +470,7 @@ export default function App() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [project, selectedDevices, handleBulkDelete])
+  }, [project, selectedDevices, handleBulkDelete, handleUndo, handleRedo])
 
   // ── Delete room ───────────────────────────────────────────────────────────
   const handleDeleteRoom = useCallback(async (roomId) => {
@@ -511,13 +554,14 @@ export default function App() {
 
   // ── New project ───────────────────────────────────────────────────────────
   const handleNewProject = useCallback(() => {
+    resetUndo()
     setProject(null)
     setActiveFloorIndex(0)
     setSelectedDevices(new Set())
     setInteractionMode(null)
     setConfig(prev => ({ ...prev, scale_pixels_per_ft: null }))
     localStorage.removeItem('floorplan_autosave')
-  }, [])
+  }, [resetUndo])
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">

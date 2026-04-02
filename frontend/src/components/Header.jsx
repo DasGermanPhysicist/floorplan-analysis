@@ -7,6 +7,8 @@ const SHORTCUTS = [
   ['A', 'Place access point'],
   ['G', 'Place gateway'],
   ['M', 'Measure distance'],
+  ['⌘/Ctrl + Z', 'Undo'],
+  ['⌘/Ctrl + ⇧Z', 'Redo'],
   ['Esc', 'Cancel current mode'],
   ['Delete', 'Delete selected devices'],
   ['⌘/Ctrl + S', 'Save project'],
