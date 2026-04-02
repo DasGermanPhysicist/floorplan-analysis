@@ -464,8 +464,8 @@ export default function FloorplanCanvas({
         return
       }
 
-      // Draw room: handled in click/dblclick
-      if (interactionMode === 'drawRoom' || interactionMode === 'deleteRoom') return
+      // These modes handle clicks via handleCanvasClick, not mouseDown
+      if (interactionMode === 'drawRoom' || interactionMode === 'deleteRoom' || interactionMode === 'ruler') return
 
       // Default: check for device drag
       if (!calibrating && !placementTool) {
@@ -579,6 +579,12 @@ export default function FloorplanCanvas({
       return
     }
 
+    if (interactionMode === 'ruler') {
+      const { x, y } = screenToFloorplan(e.clientX, e.clientY)
+      onClick(x, y)
+      return
+    }
+
     // Click a device to toggle selection in select mode
     if (interactionMode === 'select') {
       const { x, y } = screenToFloorplan(e.clientX, e.clientY)
@@ -592,7 +598,7 @@ export default function FloorplanCanvas({
         })
       }
     }
-  }, [interactionMode, screenToFloorplan, findRoomAt, findDeviceAt, onDeleteRoom, setSelectedDevices])
+  }, [interactionMode, screenToFloorplan, findRoomAt, findDeviceAt, onDeleteRoom, setSelectedDevices, onClick])
 
   const handleDblClick = useCallback((e) => {
     // Double-click also finishes room drawing as a fallback
