@@ -122,6 +122,7 @@ Open **http://localhost:5173**
 | `B` | Toggle beacon placement tool |
 | `A` | Toggle access point placement tool |
 | `G` | Toggle gateway placement tool |
+| `S` | Toggle select / bulk-delete mode |
 | `M` | Toggle ruler / measure tool |
 | `⌘/Ctrl + Z` | Undo |
 | `⌘/Ctrl + Shift + Z` | Redo |

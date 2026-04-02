@@ -6,6 +6,7 @@ const SHORTCUTS = [
   ['B', 'Place beacon'],
   ['A', 'Place access point'],
   ['G', 'Place gateway'],
+  ['S', 'Select / bulk-delete mode'],
   ['M', 'Measure distance'],
   ['⌘/Ctrl + Z', 'Undo'],
   ['⌘/Ctrl + ⇧Z', 'Redo'],

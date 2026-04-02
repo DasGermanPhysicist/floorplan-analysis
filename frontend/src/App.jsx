@@ -402,7 +402,7 @@ export default function App() {
         return { ...prev, floors }
       })
       setSelectedDevices(new Set())
-      setInteractionMode(null)
+      // Stay in select mode so user can keep selecting/deleting
     } catch (e) {
       setError(e.message)
     } finally {
@@ -447,6 +447,17 @@ export default function App() {
         return
       }
 
+      // S = select mode (toggle)
+      if (key === 's' && !e.metaKey && !e.ctrlKey) {
+        setInteractionMode(prev => {
+          if (prev === 'select') return null
+          setPlacementTool(null)
+          setSelectedDevices(new Set())
+          return 'select'
+        })
+        return
+      }
+
       // M = measure (ruler)
       if (key === 'm' && !e.metaKey && !e.ctrlKey) {
         setInteractionMode(prev => prev === 'ruler' ? null : 'ruler')
@@ -454,7 +465,7 @@ export default function App() {
         return
       }
 
-      // S = save project (Cmd/Ctrl+S)
+      // Cmd/Ctrl+S = save project
       if (key === 's' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
         if (project) window.open(`${API_BASE}/api/save-project/${project.project_id}`, '_blank')
