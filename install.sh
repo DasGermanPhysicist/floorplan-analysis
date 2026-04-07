@@ -41,14 +41,29 @@ fi
 # ── Install Homebrew (if missing) ────────────────────────────────────────────
 
 step "Checking Homebrew"
+# Ensure brew is in PATH (Apple Silicon default location)
+if [[ -f /opt/homebrew/bin/brew ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [[ -f /usr/local/bin/brew ]]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+fi
+
 if command_exists brew; then
     info "Homebrew found"
 else
     warn "Homebrew not found — installing..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     # Add brew to PATH for Apple Silicon
     if [[ -f /opt/homebrew/bin/brew ]]; then
         eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [[ -f /usr/local/bin/brew ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+    if ! command_exists brew; then
+        echo "❌ Homebrew installation failed. Please install manually:"
+        echo "   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+        echo "   Then re-run this installer."
+        exit 1
     fi
     info "Homebrew installed"
 fi
