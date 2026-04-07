@@ -38,63 +38,103 @@ if [[ "$(uname)" != "Darwin" ]]; then
     exit 1
 fi
 
-# ── Install Homebrew (if missing) ────────────────────────────────────────────
+# ── Locate Homebrew (if available) ─────────────────────────────────────────
 
-step "Checking Homebrew"
-# Ensure brew is in PATH (Apple Silicon default location)
+# Ensure brew is in PATH (Apple Silicon / Intel default locations)
 if [[ -f /opt/homebrew/bin/brew ]]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
 elif [[ -f /usr/local/bin/brew ]]; then
     eval "$(/usr/local/bin/brew shellenv)"
 fi
 
-if command_exists brew; then
-    info "Homebrew found"
-else
-    warn "Homebrew not found — installing..."
+HAS_BREW=false
+if command_exists brew; then HAS_BREW=true; fi
+
+ensure_brew() {
+    # Try to install Homebrew if we don't have it and we need it
+    if $HAS_BREW; then return 0; fi
+
+    step "Installing Homebrew (required for missing dependencies)"
+    # Check for sudo access first
+    if ! sudo -n true 2>/dev/null; then
+        echo ""
+        echo "❌ Cannot auto-install dependencies without admin (sudo) access."
+        echo ""
+        echo "   Please ask an administrator to install the missing tools, or"
+        echo "   install Homebrew manually (requires admin password once):"
+        echo ""
+        echo "   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+        echo ""
+        echo "   Then re-run this installer."
+        exit 1
+    fi
+
     NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    # Add brew to PATH for Apple Silicon
     if [[ -f /opt/homebrew/bin/brew ]]; then
         eval "$(/opt/homebrew/bin/brew shellenv)"
     elif [[ -f /usr/local/bin/brew ]]; then
         eval "$(/usr/local/bin/brew shellenv)"
     fi
-    if ! command_exists brew; then
+    if command_exists brew; then
+        HAS_BREW=true
+        info "Homebrew installed"
+    else
         echo "❌ Homebrew installation failed. Please install manually:"
         echo "   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-        echo "   Then re-run this installer."
         exit 1
     fi
-    info "Homebrew installed"
-fi
+}
 
-# ── Install system dependencies ──────────────────────────────────────────────
+# ── Check dependencies (install via Homebrew only if missing) ─────────────
+
+MISSING=()
 
 step "Checking Python"
 if command_exists python3 && [[ "$(python3 -c 'import sys; print(sys.version_info >= (3,10))')" == "True" ]]; then
     info "Python 3.10+ found: $(python3 --version)"
 else
-    warn "Installing Python via Homebrew..."
-    brew install python@3.12
-    info "Python installed"
+    MISSING+=("python")
 fi
 
 step "Checking Node.js"
 if command_exists node && [[ "$(node -e 'console.log(parseInt(process.version.slice(1)) >= 18)')" == "true" ]]; then
     info "Node.js 18+ found: $(node --version)"
 else
-    warn "Installing Node.js via Homebrew..."
-    brew install node@20
-    info "Node.js installed"
+    MISSING+=("node")
 fi
 
 step "Checking Poppler (PDF support)"
 if command_exists pdftoppm; then
     info "Poppler found"
 else
-    warn "Installing Poppler via Homebrew..."
-    brew install poppler
-    info "Poppler installed"
+    MISSING+=("poppler")
+fi
+
+# Install anything that's missing
+if [[ ${#MISSING[@]} -gt 0 ]]; then
+    warn "Missing: ${MISSING[*]} — will install via Homebrew"
+    ensure_brew
+    for dep in "${MISSING[@]}"; do
+        case "$dep" in
+            python)
+                warn "Installing Python via Homebrew..."
+                brew install python@3.12
+                info "Python installed"
+                ;;
+            node)
+                warn "Installing Node.js via Homebrew..."
+                brew install node@20
+                info "Node.js installed"
+                ;;
+            poppler)
+                warn "Installing Poppler via Homebrew..."
+                brew install poppler
+                info "Poppler installed"
+                ;;
+        esac
+    done
+else
+    info "All system dependencies satisfied"
 fi
 
 # ── Clone or update the repository ───────────────────────────────────────────
