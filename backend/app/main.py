@@ -38,6 +38,12 @@ PROJECTS_DIR.mkdir(exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.mount("/processed", StaticFiles(directory="processed"), name="processed")
 
+# ── Health check ──────────────────────────────────────────────────────────────
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok"}
+
 # Frontend dist path — SPA catch-all route is registered at the end of this file
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend_dist"
 
